@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -56,14 +57,14 @@ class CustomerAddress(Base):
 
     client: Mapped["Client"] = relationship(back_populates = "addresses")
 
-    _table_args__ = (
-        Index(
-            "uq_endereco_principal_por_cliente_v2",
-            "cliente_id",
-            unique=True,
-            postgresql_where=Text("endereco_principal = true"), # noqa: E712
-        ),
-    )
+    __table_args__ = (
+    Index(
+        "uq_endereco_principal_por_cliente_v2",
+        "cliente_id",
+        unique=True,
+        postgresql_where=text("endereco_principal = true"),  # noqa: E712
+    ),
+)
 
 class PaymentMethod(Base):
     __tablename__ = "forma_pagamento"
