@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from backend.app.routers import autenticacao_route
 
 app = FastAPI(
     title="Delivery de Marmitas",
@@ -13,6 +14,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(autenticacao_route.router)
 
 
 @app.get("/health")
