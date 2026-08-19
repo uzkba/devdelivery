@@ -58,10 +58,10 @@ class CustomerAddress(Base):
 
     _table_args__ = (
         Index(
-            "uq_endereco_principal_por_cliente",
-            "cliente_id",  # <--- Mude de "client_id" para "cliente_id"
+            "uq_endereco_principal_por_cliente_v2",
+            "cliente_id",
             unique=True,
-            postgresql_where=(primary_address == True), # noqa: E712
+            postgresql_where=Text("endereco_principal = true"), # noqa: E712
         ),
     )
 
