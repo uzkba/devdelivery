@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
- 
+
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -20,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
- 
+
 from backend.app.core.database import Base
 
 class Restaurant(Base):
