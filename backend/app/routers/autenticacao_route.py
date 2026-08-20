@@ -1,7 +1,3 @@
-# backend/app/api/routes/auth.py
-"""
-Rotas de autenticação (login) para AdminUser (restaurante/atendente/caixa/entregador).
-"""
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,9 +20,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(AdminUser).where(AdminUser.login == payload.login))
-
-    # Mensagem genérica de propósito: não revelar se foi o login ou a senha
-    # que estava errada (evita enumeração de usuários).
     credenciais_invalidas = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Login ou senha inválidos.",
@@ -62,5 +55,4 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 
 @router.get("/me", response_model=AuthenticatedUser)
 def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
-    """Endpoint simples para o frontend validar/inspecionar o token atual."""
     return current_user

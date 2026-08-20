@@ -1,25 +1,27 @@
-# backend/app/api/depedencias.py
-"""
-Dependencies de autenticação/autorização para proteger rotas do FastAPI.
-"""
 import uuid
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
 
+from backend.app.core.database import get_db
 from backend.app.core.seguranca import JWTError, decode_access_token
+from backend.app.model.models import AdminUser
 from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
 
-# tokenUrl é só documentação (Swagger); o login continua em POST /auth/login
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthenticatedUser:
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> AuthenticatedUser:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não foi possível validar as credenciais.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
         payload = decode_access_token(token)
     except JWTError:
@@ -30,22 +32,31 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthenticatedUser:
         raise credentials_exception
 
     try:
-        return AuthenticatedUser(
-            id=uuid.UUID(user_id),
-            login=payload["login"],
-            name=payload["name"],
-            role=payload["role"],
-            restaurant_id=uuid.UUID(payload["restaurant_id"]),
-        )
-    except (KeyError, ValueError):
+        uid = uuid.UUID(user_id)
+    except ValueError:
         raise credentials_exception
+
+    user = db.get(AdminUser, uid)
+    
+    if user is None:
+        raise credentials_exception
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário inativo."
+        )
+
+    return AuthenticatedUser(
+        id=user.id,
+        login=user.login,
+        name=user.name,
+        role=user.role,
+        restaurant_id=user.restaurant_id,
+    )
 
 
 def require_role(*allowed_roles: str):
-    """
-    Factory de dependency para restringir uma rota a determinados papéis.
-    Uso: @router.post(..., dependencies=[Depends(require_role("admin"))])
-    """
     def checker(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
         if current_user.role not in allowed_roles:
             raise HTTPException(
