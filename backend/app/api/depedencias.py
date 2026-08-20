@@ -1,4 +1,4 @@
-# backend/app/api/deps.py
+# backend/app/api/depedencias.py
 """
 Dependencies de autenticação/autorização para proteger rotas do FastAPI.
 """
