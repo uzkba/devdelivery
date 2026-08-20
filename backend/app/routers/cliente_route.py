@@ -1,16 +1,12 @@
-# backend/app/routers/cliente_route.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db  # caminho corrigido
+from backend.app.core.database import get_db
+from backend.app.api.depedencias import require_role
 from backend.app.model.models import Client
+from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
 from backend.app.schemas.cliente_schemas import ClienteCreate, ClienteOut
-
-def fake_admin_dependency():
-    """Placeholder temporário até o middleware de admin real ser integrado."""
-    return {"id": "admin-fake", "email": "admin@teste.com"}
-
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
@@ -19,7 +15,7 @@ router = APIRouter(prefix="/clientes", tags=["Clientes"])
 def criar_cliente(
     cliente: ClienteCreate,
     db: Session = Depends(get_db),
-    admin=Depends(fake_admin_dependency),
+    admin: AuthenticatedUser = Depends(require_role("admin")),
 ):
     existente = db.query(Client).filter(Client.phone == cliente.phone).first()
     if existente:
