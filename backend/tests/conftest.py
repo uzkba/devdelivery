@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from backend.app.core.database import get_db
 from backend.app.core.seguranca import hash_password
 from backend.main import app
+from backend.app.model.models import Client, CustomerAddress
 
 load_dotenv()
 
@@ -100,6 +101,101 @@ def inactive_admin_with_admin_role(db, restaurante):
         password_hash=hash_password("senha123"),
         role="admin",
         is_active=False,
+    )
+    db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user
+
+@pytest.fixture()
+def cliente(db):
+    c = Client(name="José da Silva", phone="11999990000")
+    db.add(c)
+    db.flush()
+    db.refresh(c)
+    return c
+
+
+@pytest.fixture()
+def outro_cliente(db):
+    c = Client(name="Ana Souza", phone="11988880000")
+    db.add(c)
+    db.flush()
+    db.refresh(c)
+    return c
+
+
+@pytest.fixture()
+def endereco(db, cliente):
+    e = CustomerAddress(
+        client_id=cliente.id,
+        street="Rua das Flores",
+        number="123",
+        neighborhood="Centro",
+        primary_address=True,
+    )
+    db.add(e)
+    db.flush()
+    db.refresh(e)
+    return e
+
+
+@pytest.fixture()
+def endereco_secundario(db, cliente):
+    e = CustomerAddress(
+        client_id=cliente.id,
+        street="Rua Secundária",
+        number="456",
+        neighborhood="Bairro Novo",
+        primary_address=False,
+    )
+    db.add(e)
+    db.flush()
+    db.refresh(e)
+    return e
+
+
+@pytest.fixture()
+def atendente_user(db, restaurante):
+    user = AdminUser(
+        restaurant_id=restaurante.id,
+        name="Ana Atendente",
+        login="ana.atendente",
+        password_hash=hash_password("senha123"),
+        role="atendente",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def caixa_user(db, restaurante):
+    user = AdminUser(
+        restaurant_id=restaurante.id,
+        name="Carlos Caixa",
+        login="carlos.caixa",
+        password_hash=hash_password("senha123"),
+        role="caixa",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def entregador_user(db, restaurante):
+    user = AdminUser(
+        restaurant_id=restaurante.id,
+        name="Pedro Entregador",
+        login="pedro.entregador",
+        password_hash=hash_password("senha123"),
+        role="entregador",
+        is_active=True,
     )
     db.add(user)
     db.flush()
