@@ -4,6 +4,7 @@ from backend.app.routers import autenticacao_route, cliente_route
 
 app = FastAPI(
     title="Delivery de Marmitas",
+    description="API do sistema de delivery de marmitas",
     version="0.1.0",
 )
 

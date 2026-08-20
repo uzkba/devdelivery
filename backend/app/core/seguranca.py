@@ -1,4 +1,4 @@
-# backend/app/core/security.py
+# backend/app/core/seguranca.py
 """
 Utilitários de segurança: hash de senha e geração/validação de JWT.
 """
@@ -14,9 +14,9 @@ from passlib.context import CryptContext
 # ---------------------------------------------------------------------------
 # IMPORTANTE: em produção, defina essas variáveis de ambiente.
 # Nunca deixe o SECRET_KEY hardcoded/commitado.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "troque-esta-chave-em-producao")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_EXPIRE_MINUTES", "60"))
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
