@@ -27,8 +27,10 @@ def get_cardapio_do_dia(
         .where(
             Menu.restaurant_id == restaurante_id,
             Menu.date == hoje,
+            # duas condições: item precisa estar disponível NO CARDÁPIO
+            # (única fonte de verdade sobre estoque/disponibilidade desde
+            # o PR #23) E o alimento não pode ter sido soft-deleted
             MenuItem.is_available.is_(True),
-            Food.is_available.is_(True),
             Food.is_active.is_(True),
         )
         .order_by(FoodCategory.display_order, FoodCategory.name, Food.name)
