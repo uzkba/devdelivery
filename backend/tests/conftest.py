@@ -1,4 +1,8 @@
+from pathlib import Path
+
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from backend.app.model.models import Base, AdminUser, Restaurant
@@ -21,6 +25,18 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _aplicar_migrations():
+    """Roda `alembic upgrade head` uma vez, no início da sessão de testes,
+    antes de qualquer fixture que use o banco. Evita depender de cada
+    dev lembrar de rodar isso manualmente (foi exatamente o que causou
+    os erros de "coluna não existe" na task de categoria de alimento)."""
+    project_root = Path(__file__).resolve().parents[2]  # conftest.py -> tests/ -> backend/ -> raiz
+    alembic_cfg = Config(str(project_root / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(alembic_cfg, "head")
 
 
 @pytest.fixture(scope="function")
