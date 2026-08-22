@@ -15,6 +15,7 @@ from backend.app.core.database import get_db
 from backend.app.core.seguranca import hash_password
 from backend.main import app
 from backend.app.model.models import Client, CustomerAddress
+from backend.app.routers.autenticacao_route import create_access_token
 
 load_dotenv()
 
@@ -217,3 +218,17 @@ def entregador_user(db, restaurante):
     db.flush()
     db.refresh(user)
     return user
+
+@pytest.fixture()
+def token_para(db):
+    def _token_para(user) -> str:
+        return create_access_token(
+            data={
+                "sub": str(user.id),
+                "login": user.login,
+                "name": user.name,
+                "role": user.role,
+                "restaurant_id": str(user.restaurant_id),
+            }
+        )
+    return _token_para

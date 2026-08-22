@@ -107,6 +107,7 @@ class AdminUser(Base):
     )
 
 
+
 class FoodCategory(Base):
     __tablename__ = "categoria_alimento"
 
@@ -116,13 +117,10 @@ class FoodCategory(Base):
     )
     name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
     display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
-    description: Mapped[str | None] = mapped_column("descricao", Text)
-    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
 
     foods: Mapped[list["Food"]] = relationship(back_populates="category")
 
     __table_args__ = (UniqueConstraint("restaurante_id", "nome"),)
-
 
 class Food(Base):
     __tablename__ = "alimento"
@@ -138,6 +136,7 @@ class Food(Base):
     description: Mapped[str | None] = mapped_column("descricao", Text)
     base_price: Mapped[Decimal] = mapped_column("preco_base", Numeric(10, 2), default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
+    is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
 
     category: Mapped["FoodCategory"] = relationship(back_populates="foods")
@@ -148,6 +147,12 @@ class Food(Base):
         # que um alimento referenciado em cardapio_item/pedido_item pertence
         # ao mesmo restaurante do cardapio/pedido. Resolver com FK composta
         # (id, restaurante_id) quando o sistema for multi-restaurante de fato.
+        # TODO: mesmo buraco existe entre category_id e restaurant_id aqui
+        # dentro de Food — nada garante que a categoria referenciada pertence
+        # ao mesmo restaurante do alimento. Mitigado na camada de service
+        # (rotas POST/PUT), não no banco.
+        # NOTE: preco_base >= 0 é decisão deliberada do time (permite item com
+        # preço 0, ex: cortesia) — não é bug, não "corrigir" pra > 0 sem alinhar antes
     )
 
 class Menu(Base):

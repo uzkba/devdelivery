@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.routers import (
+    alimento_route,
     autenticacao_route,
     cardapio_route,
     categoria_alimento_route,
@@ -28,6 +29,7 @@ app.include_router(cliente_route.router)
 app.include_router(teste.router)
 app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
+app.include_router(alimento_route.router)
 app.include_router(cardapio_route.router)
 
 
