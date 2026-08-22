@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.routers import autenticacao_route, cliente_route, endereco_route, teste, categoria_alimento_route
+from backend.app.routers import (
+    autenticacao_route,
+    cardapio_route,
+    categoria_alimento_route,
+    cliente_route,
+    endereco_route,
+    teste,
+)
 
 app = FastAPI(
     title="Delivery de Marmitas",
@@ -21,6 +28,7 @@ app.include_router(cliente_route.router)
 app.include_router(teste.router)
 app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
+app.include_router(cardapio_route.router)
 
 
 @app.get("/health")
