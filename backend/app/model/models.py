@@ -107,7 +107,6 @@ class AdminUser(Base):
     )
 
 
-
 class FoodCategory(Base):
     __tablename__ = "categoria_alimento"
 
@@ -117,10 +116,16 @@ class FoodCategory(Base):
     )
     name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
     display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
+    description: Mapped[str | None] = mapped_column("descricao", Text)
+    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
+    is_main_dish: Mapped[bool] = mapped_column(
+        "prato_principal", Boolean, default=False, server_default="false", nullable=False
+    )
 
     foods: Mapped[list["Food"]] = relationship(back_populates="category")
 
     __table_args__ = (UniqueConstraint("restaurante_id", "nome"),)
+
 
 class Food(Base):
     __tablename__ = "alimento"
@@ -147,13 +152,51 @@ class Food(Base):
         # que um alimento referenciado em cardapio_item/pedido_item pertence
         # ao mesmo restaurante do cardapio/pedido. Resolver com FK composta
         # (id, restaurante_id) quando o sistema for multi-restaurante de fato.
-        # TODO: mesmo buraco existe entre category_id e restaurant_id aqui
-        # dentro de Food — nada garante que a categoria referenciada pertence
-        # ao mesmo restaurante do alimento. Mitigado na camada de service
-        # (rotas POST/PUT), não no banco.
-        # NOTE: preco_base >= 0 é decisão deliberada do time (permite item com
-        # preço 0, ex: cortesia) — não é bug, não "corrigir" pra > 0 sem alinhar antes
     )
+
+
+class MarmitaSize(Base):
+    """Tamanho da marmita (ex: Pequena, Grande), por restaurante."""
+    __tablename__ = "tamanho_marmita"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    restaurant_id: Mapped[uuid.UUID] = mapped_column(
+        "restaurante_id", ForeignKey("restaurante.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column("nome", String(30), nullable=False)
+    display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
+
+    limits: Mapped[list["SizeCategoryLimit"]] = relationship(
+        back_populates="size", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (UniqueConstraint("restaurante_id", "nome"),)
+
+
+class SizeCategoryLimit(Base):
+    """Quantidade máxima de itens de uma categoria (ex: Proteína, Salada)
+    permitida para um dado tamanho de marmita. Não se aplica à categoria
+    marcada como prato_principal."""
+    __tablename__ = "limite_categoria_tamanho"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    size_id: Mapped[uuid.UUID] = mapped_column(
+        "tamanho_id", ForeignKey("tamanho_marmita.id", ondelete="CASCADE"), nullable=False
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        "categoria_id", ForeignKey("categoria_alimento.id"), nullable=False
+    )
+    max_quantity: Mapped[int] = mapped_column("quantidade_maxima", Integer, nullable=False)
+
+    size: Mapped["MarmitaSize"] = relationship(back_populates="limits")
+    category: Mapped["FoodCategory"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("tamanho_id", "categoria_id"),
+        CheckConstraint("quantidade_maxima >= 0", name="ck_limite_categoria_tamanho_qtd"),
+    )
+
 
 class Menu(Base):
     __tablename__ = "cardapio"
@@ -181,13 +224,20 @@ class MenuItem(Base):
         "cardapio_id", ForeignKey("cardapio.id", ondelete="CASCADE"), nullable=False
     )
     food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id"), nullable=False)
+    size_id: Mapped[uuid.UUID | None] = mapped_column("tamanho_id", ForeignKey("tamanho_marmita.id"))
     is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
     day_price: Mapped[Decimal | None] = mapped_column("preco_dia", Numeric(10, 2))
 
     menu: Mapped["Menu"] = relationship(back_populates="items")
 
     __table_args__ = (
-        UniqueConstraint("cardapio_id", "alimento_id"),
+        UniqueConstraint("cardapio_id", "alimento_id", "tamanho_id", name="uq_cardapio_item_alimento_tamanho"),
+        Index(
+            "uq_cardapio_item_sem_tamanho",
+            "cardapio_id", "alimento_id",
+            unique=True,
+            postgresql_where=text("tamanho_id IS NULL"),
+        ),
         CheckConstraint("preco_dia IS NULL OR preco_dia >= 0", name="ck_cardapio_item_preco_dia"),
         Index("idx_cardapio_item_disponivel", "cardapio_id", "disponivel"),
     )

@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class AlimentoCreate(BaseModel):
@@ -33,6 +33,8 @@ class AlimentoUpdate(BaseModel):
 
 
 class AlimentoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     nome: str
     descricao: Optional[str]
@@ -40,6 +42,3 @@ class AlimentoOut(BaseModel):
     categoria_id: uuid.UUID
     ativo: bool
     disponivel: bool
-
-    class Config:
-        from_attributes = True

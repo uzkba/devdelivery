@@ -7,6 +7,7 @@ from backend.app.routers import (
     categoria_alimento_route,
     cliente_route,
     endereco_route,
+    tamanho_marmita_route,
     teste,
 )
 
@@ -31,6 +32,7 @@ app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
 app.include_router(alimento_route.router)
 app.include_router(cardapio_route.router)
+app.include_router(tamanho_marmita_route.router)
 
 
 @app.get("/health")
