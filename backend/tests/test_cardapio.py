@@ -270,3 +270,151 @@ class TestCardapioDoDia:
     def test_sem_cardapio_cadastrado_retorna_404(self, client):
         response = client.get("/cardapio/hoje")
         assert response.status_code == 404
+
+        # --- novo (task #16 — Gestão do Cardápio do Dia) --------------------------
+
+@pytest.fixture()
+def categoria_marmita(db, restaurante):
+    c = FoodCategory(restaurant_id=restaurante.id, name="Marmita", is_main_dish=True)
+    db.add(c)
+    db.flush()
+    db.refresh(c)
+    return c
+
+
+@pytest.fixture()
+def alimento_marmita(db, restaurante, categoria_marmita):
+    a = Food(restaurant_id=restaurante.id, category_id=categoria_marmita.id, name="Marmita Tradicional", base_price=Decimal("0"))
+    db.add(a)
+    db.flush()
+    db.refresh(a)
+    return a
+
+
+@pytest.fixture()
+def alimento_refrigerante(db, restaurante, categoria):
+    a = Food(restaurant_id=restaurante.id, category_id=categoria.id, name="Refrigerante Lata", base_price=Decimal("6"))
+    db.add(a)
+    db.flush()
+    db.refresh(a)
+    return a
+
+
+@pytest.fixture()
+def alimento_inativo(db, restaurante, categoria):
+    a = Food(restaurant_id=restaurante.id, category_id=categoria.id, name="Suco Descontinuado", base_price=Decimal("5"), is_active=False)
+    db.add(a)
+    db.flush()
+    db.refresh(a)
+    return a
+
+
+def _criar_tamanho(client, headers, nome="Grande"):
+    response = client.post("/tamanhos-marmita", json={"nome": nome, "ordem_exibicao": 0}, headers=headers)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+class TestCriarCardapio:
+    def test_criar_cardapio_com_sucesso(self, client, admin_user):
+        headers = _headers(client, "maria.admin")
+        response = client.post("/cardapio", json={"data": str(date.today())}, headers=headers)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["data"] == str(date.today())
+
+    def test_criar_cardapio_duplicado_na_mesma_data_falha(self, client, admin_user):
+        headers = _headers(client, "maria.admin")
+        # já existe um cardápio de hoje criado pela fixture cardapio_hoje em
+        # outros testes desta classe — usa uma data futura pra não colidir
+        data_teste = str(date.today().replace(day=1))
+        client.post("/cardapio", json={"data": data_teste}, headers=headers)
+        response = client.post("/cardapio", json={"data": data_teste}, headers=headers)
+        assert response.status_code == 400
+        assert "já existe" in response.json()["detail"].lower()
+
+    def test_criar_cardapio_sem_autenticacao_falha(self, client):
+        response = client.post("/cardapio", json={"data": str(date.today())})
+        assert response.status_code == 401
+
+
+class TestBuscarCardapioNovo:
+    def test_buscar_cardapio_de_outro_restaurante_retorna_404(self, client, admin_user, outro_admin_user):
+        headers_a = _headers(client, "maria.admin")
+        headers_b = _headers(client, "ze.admin.cardapio")
+
+        criado = client.post("/cardapio", json={"data": str(date.today())}, headers=headers_b).json()
+        response = client.get(f"/cardapio/{criado['id']}", headers=headers_a)
+        assert response.status_code == 404
+
+
+class TestAdicionarItensNovo:
+    def test_adicionar_prato_principal_com_tamanho_funciona(self, client, admin_user, alimento_marmita):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+        tamanho = _criar_tamanho(client, headers, "Grande")
+
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens",
+            json={"itens": [{"alimento_id": str(alimento_marmita.id), "tamanho_id": tamanho["id"], "preco_dia": "25.00"}]},
+            headers=headers,
+        )
+        assert response.status_code == 201
+        itens = response.json()["itens"]
+        assert itens[0]["tamanho_id"] == tamanho["id"]
+
+    def test_adicionar_adicional_sem_tamanho_funciona(self, client, admin_user, alimento_refrigerante):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens",
+            json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]},
+            headers=headers,
+        )
+        assert response.status_code == 201
+        assert response.json()["itens"][0]["tamanho_id"] is None
+
+    def test_adicionar_prato_principal_sem_tamanho_falha(self, client, admin_user, alimento_marmita):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens",
+            json={"itens": [{"alimento_id": str(alimento_marmita.id)}]},
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert "exige um tamanho" in response.json()["detail"].lower()
+
+    def test_adicionar_adicional_com_tamanho_falha(self, client, admin_user, alimento_refrigerante):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+        tamanho = _criar_tamanho(client, headers, "Grande")
+
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens",
+            json={"itens": [{"alimento_id": str(alimento_refrigerante.id), "tamanho_id": tamanho["id"]}]},
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert "não deve ter tamanho" in response.json()["detail"].lower()
+
+    def test_adicionar_alimento_inativo_falha(self, client, admin_user, alimento_inativo):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens",
+            json={"itens": [{"alimento_id": str(alimento_inativo.id)}]},
+            headers=headers,
+        )
+        assert response.status_code == 400
+
+    def test_adicionar_alimento_ja_existente_no_cardapio_falha(self, client, admin_user, alimento_refrigerante):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+
+        client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]}, headers=headers)
+        response = client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]}, headers=headers)
+        assert response.status_code == 400

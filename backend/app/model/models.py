@@ -118,6 +118,9 @@ class FoodCategory(Base):
     display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
     description: Mapped[str | None] = mapped_column("descricao", Text)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
+    is_main_dish: Mapped[bool] = mapped_column(
+        "prato_principal", Boolean, default=False, server_default="false", nullable=False
+    )
 
     foods: Mapped[list["Food"]] = relationship(back_populates="category")
 
@@ -138,6 +141,7 @@ class Food(Base):
     description: Mapped[str | None] = mapped_column("descricao", Text)
     base_price: Mapped[Decimal] = mapped_column("preco_base", Numeric(10, 2), default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
+    is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
 
     category: Mapped["FoodCategory"] = relationship(back_populates="foods")
@@ -149,6 +153,50 @@ class Food(Base):
         # ao mesmo restaurante do cardapio/pedido. Resolver com FK composta
         # (id, restaurante_id) quando o sistema for multi-restaurante de fato.
     )
+
+
+class MarmitaSize(Base):
+    """Tamanho da marmita (ex: Pequena, Grande), por restaurante."""
+    __tablename__ = "tamanho_marmita"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    restaurant_id: Mapped[uuid.UUID] = mapped_column(
+        "restaurante_id", ForeignKey("restaurante.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column("nome", String(30), nullable=False)
+    display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
+
+    limits: Mapped[list["SizeCategoryLimit"]] = relationship(
+        back_populates="size", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (UniqueConstraint("restaurante_id", "nome"),)
+
+
+class SizeCategoryLimit(Base):
+    """Quantidade máxima de itens de uma categoria (ex: Proteína, Salada)
+    permitida para um dado tamanho de marmita. Não se aplica à categoria
+    marcada como prato_principal."""
+    __tablename__ = "limite_categoria_tamanho"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    size_id: Mapped[uuid.UUID] = mapped_column(
+        "tamanho_id", ForeignKey("tamanho_marmita.id", ondelete="CASCADE"), nullable=False
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        "categoria_id", ForeignKey("categoria_alimento.id"), nullable=False
+    )
+    max_quantity: Mapped[int] = mapped_column("quantidade_maxima", Integer, nullable=False)
+
+    size: Mapped["MarmitaSize"] = relationship(back_populates="limits")
+    category: Mapped["FoodCategory"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("tamanho_id", "categoria_id"),
+        CheckConstraint("quantidade_maxima >= 0", name="ck_limite_categoria_tamanho_qtd"),
+    )
+
 
 class Menu(Base):
     __tablename__ = "cardapio"
@@ -176,13 +224,20 @@ class MenuItem(Base):
         "cardapio_id", ForeignKey("cardapio.id", ondelete="CASCADE"), nullable=False
     )
     food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id"), nullable=False)
+    size_id: Mapped[uuid.UUID | None] = mapped_column("tamanho_id", ForeignKey("tamanho_marmita.id"))
     is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
     day_price: Mapped[Decimal | None] = mapped_column("preco_dia", Numeric(10, 2))
 
     menu: Mapped["Menu"] = relationship(back_populates="items")
 
     __table_args__ = (
-        UniqueConstraint("cardapio_id", "alimento_id"),
+        UniqueConstraint("cardapio_id", "alimento_id", "tamanho_id", name="uq_cardapio_item_alimento_tamanho"),
+        Index(
+            "uq_cardapio_item_sem_tamanho",
+            "cardapio_id", "alimento_id",
+            unique=True,
+            postgresql_where=text("tamanho_id IS NULL"),
+        ),
         CheckConstraint("preco_dia IS NULL OR preco_dia >= 0", name="ck_cardapio_item_preco_dia"),
         Index("idx_cardapio_item_disponivel", "cardapio_id", "disponivel"),
     )
