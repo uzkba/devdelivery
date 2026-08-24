@@ -1,12 +1,3 @@
-"""
-app/routers/cardapio_route.py
-
-GET   /cardapio/hoje                                            — (#17) visão pública do cliente
-POST  /cardapio                                                 — (#16) registra cardápio para uma data
-GET   /cardapio/{menu_id}                                       — (#16) busca cardápio com itens
-POST  /cardapio/{menu_id}/itens                                 — (#16) adiciona alimentos ao cardápio
-PATCH /cardapio/{menu_id}/itens/{menu_item_id}/disponibilidade  — (#17) altera disponibilidade + auditoria
-"""
 import uuid
 from datetime import date
 

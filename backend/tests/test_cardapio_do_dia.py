@@ -1,12 +1,12 @@
 import pytest
 from datetime import date, timedelta
 from decimal import Decimal
- 
-from backend.app.model.models import Food, FoodCategory, Menu, MenuItem
- 
- 
+
+from backend.app.model.models import Food, FoodCategory, Menu, MenuItem, ModifierGroup, ModifierOption
+
+
 # ── fixtures locais, mesmo padrão de test_alimento.py ──
- 
+
 @pytest.fixture()
 def categoria(db, restaurante):
     c = FoodCategory(restaurant_id=restaurante.id, name="Pratos", display_order=0)
@@ -14,8 +14,8 @@ def categoria(db, restaurante):
     db.flush()
     db.refresh(c)
     return c
- 
- 
+
+
 def criar_alimento_direto(db, categoria, **overrides):
     dados = dict(
         restaurant_id=categoria.restaurant_id,
@@ -31,16 +31,16 @@ def criar_alimento_direto(db, categoria, **overrides):
     db.flush()
     db.refresh(f)
     return f
- 
- 
+
+
 def criar_cardapio(db, restaurante, data=None):
     menu = Menu(restaurant_id=restaurante.id, date=data or date.today())
     db.add(menu)
     db.flush()
     db.refresh(menu)
     return menu
- 
- 
+
+
 def criar_item_cardapio(db, menu, alimento, is_available=True, day_price=None):
     item = MenuItem(
         menu_id=menu.id,
@@ -52,17 +52,17 @@ def criar_item_cardapio(db, menu, alimento, is_available=True, day_price=None):
     db.flush()
     db.refresh(item)
     return item
- 
- 
+
+
 # ── testes ──────────────────────────────────────────────────────
- 
+
 def test_item_disponivel_aparece_agrupado_por_categoria(db, client, restaurante, categoria):
     alimento = criar_alimento_direto(db, categoria, name="Feijoada")
     menu = criar_cardapio(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     assert resp.status_code == 200
     corpo = resp.json()
     assert corpo["data"] == date.today().isoformat()
@@ -70,62 +70,98 @@ def test_item_disponivel_aparece_agrupado_por_categoria(db, client, restaurante,
     assert corpo["categorias"][0]["categoria_nome"] == categoria.name
     assert corpo["categorias"][0]["itens"][0]["nome"] == "Feijoada"
     assert corpo["categorias"][0]["itens"][0]["preco"] == "10.00"
- 
- 
+    # Garante que um item simples retorna a lista de complementos vazia pro front-end não quebrar
+    assert corpo["categorias"][0]["itens"][0]["grupos_complemento"] == []
+
+
+def test_item_retorna_grupos_de_complemento(db, client, restaurante, categoria):
+    """
+    Novo Teste: Garante que combos/marmitas retornam suas opções de escolha aninhadas
+    para que o front-end (React) consiga renderizar o formulário de 'Adicionar ao Carrinho'.
+    """
+    alimento = criar_alimento_direto(db, categoria, name="Marmita P")
+    
+    # Criando o grupo de complemento direto no banco
+    grupo = ModifierGroup(food_id=alimento.id, name="Escolha sua Carne", min_choices=1, max_choices=1)
+    db.add(grupo)
+    db.flush()
+    
+    # Adicionando uma opção a este grupo
+    opcao = ModifierOption(group_id=grupo.id, name="Bife", extra_price=Decimal("2.00"))
+    db.add(opcao)
+    db.flush()
+
+    menu = criar_cardapio(db, restaurante)
+    criar_item_cardapio(db, menu, alimento)
+
+    resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
+    
+    assert resp.status_code == 200
+    item_json = resp.json()["categorias"][0]["itens"][0]
+    
+    assert len(item_json["grupos_complemento"]) == 1
+    grupo_json = item_json["grupos_complemento"][0]
+    
+    assert grupo_json["nome"] == "Escolha sua Carne"
+    assert grupo_json["min_choices"] == 1
+    assert len(grupo_json["opcoes"]) == 1
+    assert grupo_json["opcoes"][0]["nome"] == "Bife"
+    assert grupo_json["opcoes"][0]["preco_adicional"] == "2.00"
+
+
 def test_item_some_quando_alimento_foi_soft_deleted(db, client, restaurante, categoria):
     # is_active=False (admin apagou o alimento) precisa esconder o item
     # mesmo que o item continue marcado como disponível no cardápio
     alimento = criar_alimento_direto(db, categoria, is_active=False)
     menu = criar_cardapio(db, restaurante)
     criar_item_cardapio(db, menu, alimento, is_available=True)
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     assert resp.json()["categorias"] == []
- 
- 
+
+
 def test_item_some_quando_indisponivel_no_cardapio(db, client, restaurante, categoria):
     alimento = criar_alimento_direto(db, categoria)
     menu = criar_cardapio(db, restaurante)
     criar_item_cardapio(db, menu, alimento, is_available=False)
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     assert resp.json()["categorias"] == []
- 
- 
+
+
 def test_cardapio_de_outro_dia_nao_aparece(db, client, restaurante, categoria):
     alimento = criar_alimento_direto(db, categoria)
     ontem = criar_cardapio(db, restaurante, data=date.today() - timedelta(days=1))
     criar_item_cardapio(db, ontem, alimento)
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     assert resp.json()["categorias"] == []
- 
- 
+
+
 def test_preco_do_dia_sobrescreve_preco_base(db, client, restaurante, categoria):
     alimento = criar_alimento_direto(db, categoria, base_price=Decimal("20.00"))
     menu = criar_cardapio(db, restaurante)
     criar_item_cardapio(db, menu, alimento, day_price=Decimal("15.90"))
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     assert resp.json()["categorias"][0]["itens"][0]["preco"] == "15.90"
- 
- 
+
+
 def test_categorias_respeitam_display_order(db, client, restaurante):
     cat_sobremesa = FoodCategory(restaurant_id=restaurante.id, name="Sobremesas", display_order=1)
     cat_prato = FoodCategory(restaurant_id=restaurante.id, name="Pratos", display_order=0)
     db.add_all([cat_sobremesa, cat_prato])
     db.flush()
- 
+
     menu = criar_cardapio(db, restaurante)
     criar_item_cardapio(db, menu, criar_alimento_direto(db, cat_sobremesa, name="Pudim"))
     criar_item_cardapio(db, menu, criar_alimento_direto(db, cat_prato, name="Feijoada"))
- 
+
     resp = client.get(f"/restaurantes/{restaurante.id}/cardapio-do-dia")
- 
+
     nomes_categorias = [c["categoria_nome"] for c in resp.json()["categorias"]]
     assert nomes_categorias == ["Pratos", "Sobremesas"]
- 

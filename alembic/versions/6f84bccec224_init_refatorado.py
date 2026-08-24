@@ -1,8 +1,8 @@
-"""schema inicial
+"""init_refatorado
 
-Revision ID: 3f332ba27c04
+Revision ID: 6f84bccec224
 Revises: 
-Create Date: 2026-08-19 00:27:03.573346
+Create Date: 2026-08-24 00:04:56.795751
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '3f332ba27c04'
+revision: str = '6f84bccec224'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -62,6 +62,9 @@ def upgrade() -> None:
     sa.Column('restaurante_id', sa.Uuid(), nullable=False),
     sa.Column('nome', sa.String(length=60), nullable=False),
     sa.Column('ordem_exibicao', sa.Integer(), nullable=False),
+    sa.Column('descricao', sa.Text(), nullable=True),
+    sa.Column('ativo', sa.Boolean(), server_default='true', nullable=False),
+    sa.Column('prato_principal', sa.Boolean(), server_default='false', nullable=False),
     sa.ForeignKeyConstraint(['restaurante_id'], ['restaurante.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('restaurante_id', 'nome')
@@ -79,6 +82,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['cliente_id'], ['cliente.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('uq_endereco_principal_por_cliente_v2', 'endereco_cliente', ['cliente_id'], unique=True, postgresql_where=sa.text('endereco_principal = true'))
     op.create_table('usuario_admin',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('restaurante_id', sa.Uuid(), nullable=False),
@@ -101,6 +105,7 @@ def upgrade() -> None:
     sa.Column('descricao', sa.Text(), nullable=True),
     sa.Column('preco_base', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('ativo', sa.Boolean(), nullable=False),
+    sa.Column('disponivel', sa.Boolean(), nullable=False),
     sa.Column('criado_em', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint('preco_base >= 0', name='ck_alimento_preco_base_positivo'),
     sa.ForeignKeyConstraint(['categoria_id'], ['categoria_alimento.id'], ),
@@ -166,9 +171,21 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['alimento_id'], ['alimento.id'], ),
     sa.ForeignKeyConstraint(['cardapio_id'], ['cardapio.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('cardapio_id', 'alimento_id')
+    sa.UniqueConstraint('cardapio_id', 'alimento_id', name='uq_cardapio_item_alimento')
     )
     op.create_index('idx_cardapio_item_disponivel', 'cardapio_item', ['cardapio_id', 'disponivel'], unique=False)
+    op.create_table('grupo_complemento',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('alimento_id', sa.Uuid(), nullable=False),
+    sa.Column('nome', sa.String(length=60), nullable=False),
+    sa.Column('escolhas_minimas', sa.Integer(), nullable=False),
+    sa.Column('escolhas_maximas', sa.Integer(), nullable=False),
+    sa.Column('ordem_exibicao', sa.Integer(), nullable=False),
+    sa.Column('ativo', sa.Boolean(), nullable=False),
+    sa.CheckConstraint('escolhas_maximas >= escolhas_minimas', name='ck_grupo_complemento_limites'),
+    sa.ForeignKeyConstraint(['alimento_id'], ['alimento.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('pedido',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('numero_pedido', sa.Integer(), sa.Identity(always=False), nullable=False),
@@ -224,19 +241,42 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_historico_status_pedido', 'historico_status_pedido', ['pedido_id', 'alterado_em'], unique=False)
+    op.create_table('opcao_complemento',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('grupo_id', sa.Uuid(), nullable=False),
+    sa.Column('nome', sa.String(length=60), nullable=False),
+    sa.Column('preco_adicional', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('disponivel', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['grupo_id'], ['grupo_complemento.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('pedido_item',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('pedido_id', sa.Uuid(), nullable=False),
-    sa.Column('alimento_id', sa.Uuid(), nullable=False),
+    sa.Column('alimento_id', sa.Uuid(), nullable=True),
     sa.Column('nome_alimento', sa.String(length=120), nullable=False),
     sa.Column('quantidade', sa.Integer(), nullable=False),
-    sa.Column('preco_unitario', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('preco_base_unitario', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('subtotal', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.CheckConstraint('preco_unitario >= 0', name='ck_pedido_item_preco_unitario'),
+    sa.Column('observacoes', sa.Text(), nullable=True),
+    sa.CheckConstraint('preco_base_unitario >= 0', name='ck_pedido_item_preco_unitario'),
     sa.CheckConstraint('quantidade > 0', name='ck_pedido_item_quantidade'),
     sa.CheckConstraint('subtotal >= 0', name='ck_pedido_item_subtotal'),
-    sa.ForeignKeyConstraint(['alimento_id'], ['alimento.id'], ),
+    sa.ForeignKeyConstraint(['alimento_id'], ['alimento.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['pedido_id'], ['pedido.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('pedido_item_opcao',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('pedido_item_id', sa.Uuid(), nullable=False),
+    sa.Column('opcao_complemento_id', sa.Uuid(), nullable=True),
+    sa.Column('nome_opcao', sa.String(length=60), nullable=False),
+    sa.Column('preco_adicional_unitario', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('quantidade', sa.Integer(), nullable=False),
+    sa.CheckConstraint('preco_adicional_unitario >= 0', name='ck_pedido_item_opcao_preco'),
+    sa.CheckConstraint('quantidade > 0', name='ck_pedido_item_opcao_quantidade'),
+    sa.ForeignKeyConstraint(['opcao_complemento_id'], ['opcao_complemento.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['pedido_item_id'], ['pedido_item.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
@@ -245,7 +285,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('pedido_item_opcao')
     op.drop_table('pedido_item')
+    op.drop_table('opcao_complemento')
     op.drop_index('idx_historico_status_pedido', table_name='historico_status_pedido')
     op.drop_table('historico_status_pedido')
     op.drop_index('idx_pedido_status', table_name='pedido')
@@ -254,6 +296,7 @@ def downgrade() -> None:
     op.drop_index('idx_pedido_data_hora', table_name='pedido')
     op.drop_index('idx_pedido_cliente', table_name='pedido')
     op.drop_table('pedido')
+    op.drop_table('grupo_complemento')
     op.drop_index('idx_cardapio_item_disponivel', table_name='cardapio_item')
     op.drop_table('cardapio_item')
     op.drop_index('idx_log_auditoria_entidade', table_name='log_auditoria')
@@ -262,6 +305,7 @@ def downgrade() -> None:
     op.drop_table('cardapio')
     op.drop_table('alimento')
     op.drop_table('usuario_admin')
+    op.drop_index('uq_endereco_principal_por_cliente_v2', table_name='endereco_cliente', postgresql_where=sa.text('endereco_principal = true'))
     op.drop_table('endereco_cliente')
     op.drop_table('categoria_alimento')
     op.drop_table('status_pedido')
