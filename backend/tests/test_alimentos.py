@@ -6,33 +6,6 @@ from backend.app.model.models import Restaurant, AdminUser, Food, FoodCategory
 from backend.app.core.seguranca import hash_password
 
 
-# ── fixtures locais deste arquivo, seguindo o padrão do conftest ──
-
-@pytest.fixture()
-def restaurante_b(db):
-    r = Restaurant(trade_name="Outro Restaurante")
-    db.add(r)
-    db.flush()
-    db.refresh(r)
-    return r
-
-
-@pytest.fixture()
-def admin_user_b(db, restaurante_b):
-    user = AdminUser(
-        restaurant_id=restaurante_b.id,
-        name="Outro Admin",
-        login="outro.admin",
-        password_hash=hash_password("senha123"),
-        role="admin",
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    db.refresh(user)
-    return user
-
-
 @pytest.fixture()
 def categoria(db, restaurante):
     c = FoodCategory(restaurant_id=restaurante.id, name="Pratos", display_order=0)
@@ -43,8 +16,8 @@ def categoria(db, restaurante):
 
 
 @pytest.fixture()
-def categoria_b(db, restaurante_b):
-    c = FoodCategory(restaurant_id=restaurante_b.id, name="Bebidas", display_order=0)
+def categoria_b(db, outro_restaurante):
+    c = FoodCategory(restaurant_id=outro_restaurante.id, name="Bebidas", display_order=0)
     db.add(c)
     db.flush()
     db.refresh(c)
@@ -88,6 +61,49 @@ def test_criar_alimento_sucesso(client, categoria, admin_user, token_para):
     data = resp.json()
     assert data["nome"] == "Marmita Fitness"
     assert data["disponivel"] is True
+    assert data["grupos_complemento"] == []
+
+
+def test_criar_alimento_com_grupos_complemento_sucesso(client, categoria, admin_user, token_para):
+    """
+    NOVO TESTE: Garante que a estrutura de árvore (Food -> ModifierGroup -> ModifierOption)
+    é criada corretamente através do payload aninhado.
+    """
+    payload = {
+        "nome": "Combo Marmita P",
+        "descricao": "Monte sua marmita",
+        "preco_base": "15.00",
+        "categoria_id": str(categoria.id),
+        "grupos_complemento": [
+            {
+                "nome": "Escolha sua Carne",
+                "escolhas_minimas": 1,
+                "escolhas_maximas": 1,
+                "opcoes": [
+                    {"nome": "Bife Acebolado", "preco_adicional": "0.00", "disponivel": True},
+                    {"nome": "Filé a Parmegiana", "preco_adicional": "4.50", "disponivel": True}
+                ]
+            }
+        ]
+    }
+    
+    resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert resp.status_code == 201
+    data = resp.json()
+    
+    assert data["nome"] == "Combo Marmita P"
+    assert len(data["grupos_complemento"]) == 1
+    
+    grupo = data["grupos_complemento"][0]
+    assert grupo["nome"] == "Escolha sua Carne"
+    assert grupo["escolhas_minimas"] == 1
+    assert grupo["escolhas_maximas"] == 1
+    assert len(grupo["opcoes"]) == 2
+    
+    opcoes_nomes = [op["nome"] for op in grupo["opcoes"]]
+    assert "Bife Acebolado" in opcoes_nomes
+    assert "Filé a Parmegiana" in opcoes_nomes
 
 
 def test_criar_alimento_role_nao_admin_e_bloqueado(client, categoria, atendente_user, token_para):
