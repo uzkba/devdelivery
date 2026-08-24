@@ -17,24 +17,6 @@ def _headers(client, login: str, password: str = "senha123") -> dict:
 
 # ── Fixtures Locais para o Domínio de Pedidos ─────────────────────
 
-@pytest.fixture()
-def status_criado(db):
-    """Garante que existe o status inicial do pedido."""
-    status = OrderStatus(code="CRIADO", name="Criado", order=1, is_final=False)
-    db.add(status)
-    db.flush()
-    db.refresh(status)
-    return status
-
-
-@pytest.fixture()
-def forma_pagamento_dinheiro(db):
-    fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
-    db.add(fp)
-    db.flush()
-    db.refresh(fp)
-    return fp
-
 
 @pytest.fixture()
 def alimento_simples(db, restaurante):

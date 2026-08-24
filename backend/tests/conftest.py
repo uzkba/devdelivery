@@ -5,7 +5,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.model.models import Base, AdminUser, Restaurant
+from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant
 import os
 from dotenv import load_dotenv
 
@@ -253,3 +253,44 @@ def outro_admin_user(db, outro_restaurante):
     db.flush()
     db.refresh(user)
     return user
+
+@pytest.fixture()
+def status_criado(db):
+    """Garante que existe o status inicial do pedido."""
+    status = OrderStatus(code="CRIADO", name="Criado", order=1, is_final=False)
+    db.add(status)
+    db.flush()
+    db.refresh(status)
+    return status
+
+
+@pytest.fixture()
+def forma_pagamento_dinheiro(db):
+    fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
+    db.add(fp)
+    db.flush()
+    db.refresh(fp)
+    return fp
+
+@pytest.fixture()
+def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, status_criado):
+    """Pedido básico no status inicial, pronto pra testar transições de status."""
+
+    pedido = Order(
+        restaurant_id=restaurante.id,
+        client_id=cliente.id,
+        status_id=status_criado.id,
+        payment_method_id=forma_pagamento_dinheiro.id,
+        address_name=cliente.name,
+        address_phone=cliente.phone,
+        address_street=endereco.street,
+        address_number=endereco.number,
+        address_neighborhood=endereco.neighborhood,
+        items_amount=20,
+        delivery_fee=5,
+        total_amount=25,
+    )
+    db.add(pedido)
+    db.flush()
+    db.refresh(pedido)
+    return pedido

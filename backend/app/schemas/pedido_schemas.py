@@ -59,3 +59,6 @@ class OrderOut(BaseModel):
     valor_troco: Optional[Decimal] = Field(default=None, validation_alias="change_amount") # <-- CORRIGIDO AQUI!
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+
+class OrderStatusUpdate(BaseModel):
+    novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
