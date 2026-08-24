@@ -30,11 +30,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="session", autouse=True)
 def _aplicar_migrations():
-    """Roda `alembic upgrade head` uma vez, no início da sessão de testes,
-    antes de qualquer fixture que use o banco. Evita depender de cada
-    dev lembrar de rodar isso manualmente (foi exatamente o que causou
-    os erros de "coluna não existe" na task de categoria de alimento)."""
-    project_root = Path(__file__).resolve().parents[2]  # conftest.py -> tests/ -> backend/ -> raiz
+    project_root = Path(__file__).resolve().parents[2]
     alembic_cfg = Config(str(project_root / "alembic.ini"))
     alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(alembic_cfg, "head")
@@ -232,3 +228,28 @@ def token_para(db):
             }
         )
     return _token_para
+
+@pytest.fixture()
+def outro_restaurante(db):
+    """Fixture global de um segundo restaurante para testes multi-tenant."""
+    r = Restaurant(trade_name="Marmitas do Zé (Restaurante B)")
+    db.add(r)
+    db.flush()
+    db.refresh(r)
+    return r
+
+@pytest.fixture()
+def outro_admin_user(db, outro_restaurante):
+    """Fixture global de um admin pertencente ao segundo restaurante."""
+    user = AdminUser(
+        restaurant_id=outro_restaurante.id,
+        name="Zé Admin",
+        login="ze.admin.cardapio",
+        password_hash=hash_password("senha123"),
+        role="admin",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user
