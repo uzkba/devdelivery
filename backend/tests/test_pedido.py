@@ -269,3 +269,169 @@ class TestBuscarPedido:
         busca_resp = client.get(f"/pedidos/{pedido['id']}", headers=headers_ze)
         
         assert busca_resp.status_code == 404
+
+class TestListarPedidos:
+
+    def _criar_pedido(self, client, headers, cliente, endereco, forma_pagamento_dinheiro, alimento_simples):
+        payload = {
+            "cliente_id": str(cliente.id),
+            "endereco_id": str(endereco.id),
+            "forma_pagamento_id": str(forma_pagamento_dinheiro.id),
+            "itens": [{"alimento_id": str(alimento_simples.id), "quantidade": 1}],
+        }
+        resp = client.post("/pedidos", json=payload, headers=headers)
+        assert resp.status_code == 201
+        return resp.json()
+
+    def test_listar_pedidos_ordenado_do_mais_antigo_para_o_mais_novo(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        primeiro = self._criar_pedido(client, headers, cliente, endereco, forma_pagamento_dinheiro, alimento_simples)
+        segundo = self._criar_pedido(client, headers, cliente, endereco, forma_pagamento_dinheiro, alimento_simples)
+
+        resp = client.get("/pedidos", headers=headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        assert [item["id"] for item in data["items"]] == [primeiro["id"], segundo["id"]]
+
+    def test_listar_pedidos_isola_por_restaurante(
+        self, client, admin_user, outro_admin_user, cliente, endereco,
+        forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        """Isolamento multi-tenant na listagem geral."""
+        headers_maria = _headers(client, "maria.admin")
+        self._criar_pedido(client, headers_maria, cliente, endereco, forma_pagamento_dinheiro, alimento_simples)
+
+        headers_ze = _headers(client, "ze.admin.cardapio")
+        resp = client.get("/pedidos", headers=headers_ze)
+
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+        assert resp.json()["items"] == []
+
+    def test_listar_pedidos_traz_nome_do_cliente(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        self._criar_pedido(client, headers, cliente, endereco, forma_pagamento_dinheiro, alimento_simples)
+
+        resp = client.get("/pedidos", headers=headers)
+
+        assert resp.status_code == 200
+        assert resp.json()["items"][0]["cliente_nome"] == "José da Silva"
+
+    def test_listar_pedidos_paginacao(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        for _ in range(3):
+            self._criar_pedido(client, headers, cliente, endereco, forma_pagamento_dinheiro, alimento_simples)
+
+        resp = client.get("/pedidos", params={"page": 1, "page_size": 2}, headers=headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 3
+        assert data["total_pages"] == 2
+        assert len(data["items"]) == 2
+
+        resp_pagina2 = client.get("/pedidos", params={"page": 2, "page_size": 2}, headers=headers)
+        assert len(resp_pagina2.json()["items"]) == 1
+
+    def test_listar_pedidos_sem_autenticacao_falha(self, client):
+        resp = client.get("/pedidos")
+        assert resp.status_code == 401
+
+
+# ── Testes de Histórico do Cliente (GET /pedidos/me) ───────────────
+
+class TestListarMeusPedidos:
+
+    def test_listar_meus_pedidos_retorna_apenas_do_cliente(
+        self, client, admin_user, cliente, outro_cliente, endereco,
+        forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        payload = {
+            "cliente_id": str(cliente.id),
+            "endereco_id": str(endereco.id),
+            "forma_pagamento_id": str(forma_pagamento_dinheiro.id),
+            "itens": [{"alimento_id": str(alimento_simples.id), "quantidade": 1}],
+        }
+        client.post("/pedidos", json=payload, headers=headers)
+
+        resp_cliente = client.get("/pedidos/me", params={"client_id": str(cliente.id)})
+        resp_outro = client.get("/pedidos/me", params={"client_id": str(outro_cliente.id)})
+
+        assert resp_cliente.status_code == 200
+        assert resp_cliente.json()["total"] == 1
+
+        assert resp_outro.status_code == 200
+        assert resp_outro.json()["total"] == 0
+
+    def test_listar_meus_pedidos_nao_exige_autenticacao(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        """Rota do cliente é pública (ainda sem login de cliente)."""
+        resp = client.get("/pedidos/me", params={"client_id": str(cliente.id)})
+        assert resp.status_code == 200
+
+    def test_listar_meus_pedidos_ordenado_do_mais_recente_para_o_mais_antigo(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        payload = {
+            "cliente_id": str(cliente.id),
+            "endereco_id": str(endereco.id),
+            "forma_pagamento_id": str(forma_pagamento_dinheiro.id),
+            "itens": [{"alimento_id": str(alimento_simples.id), "quantidade": 1}],
+        }
+        primeiro = client.post("/pedidos", json=payload, headers=headers).json()
+        segundo = client.post("/pedidos", json=payload, headers=headers).json()
+
+        resp = client.get("/pedidos/me", params={"client_id": str(cliente.id)})
+
+        assert [item["id"] for item in resp.json()["items"]] == [segundo["id"], primeiro["id"]]
+
+
+# ── Testes de Detalhe do Pedido para o Cliente (GET /pedidos/cliente/{id}) ─
+
+class TestBuscarPedidoDoCliente:
+
+    def test_buscar_pedido_do_cliente_dono_retorna_detalhe(
+        self, client, admin_user, cliente, endereco, forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        payload = {
+            "cliente_id": str(cliente.id),
+            "endereco_id": str(endereco.id),
+            "forma_pagamento_id": str(forma_pagamento_dinheiro.id),
+            "itens": [{"alimento_id": str(alimento_simples.id), "quantidade": 1}],
+        }
+        pedido = client.post("/pedidos", json=payload, headers=headers).json()
+
+        resp = client.get(f"/pedidos/cliente/{pedido['id']}", params={"client_id": str(cliente.id)})
+
+        assert resp.status_code == 200
+        assert resp.json()["id"] == pedido["id"]
+        assert resp.json()["cliente"]["nome"] == "José da Silva"
+
+    def test_buscar_pedido_de_outro_cliente_retorna_404(
+        self, client, admin_user, cliente, outro_cliente, endereco,
+        forma_pagamento_dinheiro, alimento_simples, status_criado
+    ):
+        headers = _headers(client, "maria.admin")
+        payload = {
+            "cliente_id": str(cliente.id),
+            "endereco_id": str(endereco.id),
+            "forma_pagamento_id": str(forma_pagamento_dinheiro.id),
+            "itens": [{"alimento_id": str(alimento_simples.id), "quantidade": 1}],
+        }
+        pedido = client.post("/pedidos", json=payload, headers=headers).json()
+
+        resp = client.get(f"/pedidos/cliente/{pedido['id']}", params={"client_id": str(outro_cliente.id)})
+
+        assert resp.status_code == 404
