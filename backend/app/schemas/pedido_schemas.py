@@ -1,8 +1,9 @@
 import uuid
 from decimal import Decimal
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
+
 class OrderItemOptionCreate(BaseModel):
     opcao_complemento_id: uuid.UUID
     quantidade: int = Field(default=1, gt=0)
@@ -12,16 +13,13 @@ class OrderItemCreate(BaseModel):
     quantidade: int = Field(default=1, gt=0)
     observacoes: Optional[str] = None
     opcoes_selecionadas: List[OrderItemOptionCreate] = []
-
 class OrderCreate(BaseModel):
-    cliente_id: uuid.UUID
+    restaurante_id: uuid.UUID
     endereco_id: uuid.UUID
-    forma_pagamento_id: uuid.UUID
-    valor_entrega: Decimal = Field(default=Decimal("0.00"), ge=0)
-    valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0) 
+    forma_pagamento: Literal["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"]
+    valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0)
     itens: List[OrderItemCreate] = Field(..., min_length=1)
     observacoes: Optional[str] = None
-
 class OrderItemOptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
