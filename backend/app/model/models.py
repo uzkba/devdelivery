@@ -41,6 +41,7 @@ class Client(Base):
     phone: Mapped[str] = mapped_column("telefone", String(20), nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
+    hashed_password: Mapped[str] = mapped_column("senha_hash", String(255), nullable=False)
 
     addresses: Mapped[list["CustomerAddress"]] = relationship(back_populates="client")
 
@@ -146,6 +147,7 @@ class Food(Base):
     __table_args__ = (
         CheckConstraint("preco_base >= 0", name="ck_alimento_preco_base_positivo"),
     )
+    
 class ModifierGroup(Base):
     __tablename__ = "grupo_complemento"
 
