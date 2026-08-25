@@ -43,6 +43,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             "name": user.name,
             "role": user.role,
             "restaurant_id": str(user.restaurant_id),
+            "type": "admin"
         },
         expires_delta=expires,
     )
