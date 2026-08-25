@@ -1,5 +1,7 @@
 from backend.app.core.seguranca import create_access_token
 from backend.app.model.models import Client
+from fastapi import Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 
 
 def cliente_payload(phone="11999990001"):
