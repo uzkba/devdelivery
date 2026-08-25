@@ -10,8 +10,9 @@ from backend.app.core.seguranca import (
     create_access_token,
     verify_password,
 )
-from backend.app.model.models import AdminUser
+from backend.app.model.models import AdminUser, Client
 from backend.app.schemas.autenticacao_schemas import AuthenticatedUser, LoginRequest, TokenResponse
+from backend.app.schemas.cliente_schemas import ClienteLoginIn
 from backend.app.api.depedencias import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -57,3 +58,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 @router.get("/me", response_model=AuthenticatedUser)
 def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
     return current_user
+
+@router.post("/login", response_model=TokenResponse)
+def login_cliente(payload: ClienteLoginIn, db: Session = Depends(get_db)) -> TokenResponse:
+    cliente = db.scalar(select(Client).where(Client.phone == payload.phone))
+    if cliente is None or not verify_password(payload.password, cliente.hashed_password):
+        raise HTTPException(status_code=401, detail="Telefone ou senha inválidos.")
+
+    token = create_access_token(data={"sub": str(cliente.id), "type": "client"})
+    return TokenResponse(access_token=token, expires_in=...)
