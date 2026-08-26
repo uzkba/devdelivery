@@ -1,8 +1,7 @@
 import uuid
 from datetime import date
 from decimal import Decimal
-
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.model.models import (
@@ -14,7 +13,7 @@ from backend.app.model.models import (
 from backend.app.schemas.pedido_schemas import OrderCreate
 from backend.app.model.models import (
     Order, OrderItem, OrderItemOption,
-    Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory
+    Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
 )
 from backend.app.api.depedencias import AuthenticatedClient
 
@@ -151,13 +150,13 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         raise HTTPException(status_code=500, detail="Erro ao registrar o pedido.")
 
     db.refresh(novo_pedido)
-    return _anexar_cliente(db, novo_pedido)
+    return novo_pedido
 
 def buscar_pedido_por_id(db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.UUID) -> Order:
        pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
        if not pedido:
            raise HTTPException(status_code=404, detail="Pedido não encontrado.")
-       return _anexar_cliente(db, pedido)
+       return pedido
 
 def listar_pedidos(
     db: Session,
@@ -243,7 +242,7 @@ def atualizar_status_pedido(
     if status_atual and status_atual.id == novo_status.id:
         raise HTTPException(status_code=400, detail="O pedido já está neste status.")
 
-    # RN17 — registra a transição no histórico
+
     db.add(
         OrderStatusHistory(
             order_id=pedido.id,
@@ -255,8 +254,7 @@ def atualizar_status_pedido(
 
     pedido.status_id = novo_status.id
 
-    db.commit()          # tudo (update + insert do histórico) na mesma transação
+    db.commit()
     db.refresh(pedido)
-    return pedido
-    pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()  # <-- FIX
+    pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()
     return pedido

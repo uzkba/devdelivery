@@ -42,7 +42,6 @@ class Client(Base):
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
     hashed_password: Mapped[str] = mapped_column("senha_hash", String(255), nullable=False)
-
     addresses: Mapped[list["CustomerAddress"]] = relationship(back_populates="client")
 
 
@@ -147,7 +146,6 @@ class Food(Base):
     __table_args__ = (
         CheckConstraint("preco_base >= 0", name="ck_alimento_preco_base_positivo"),
     )
-    
 class ModifierGroup(Base):
     __tablename__ = "grupo_complemento"
 
@@ -234,6 +232,7 @@ class CashClosing(Base):
     __table_args__ = (
         CheckConstraint("data_fim >= data_inicio", name="ck_fechamento_periodo_valido"),
     )
+
 class Order(Base):
     __tablename__ = "pedido"
 
@@ -263,6 +262,8 @@ class Order(Base):
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     status_history: Mapped[list["OrderStatusHistory"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    client: Mapped["Client"] = relationship(lazy="joined")
+
 
     __table_args__ = (
         CheckConstraint("valor_itens >= 0", name="ck_pedido_valor_itens"),
