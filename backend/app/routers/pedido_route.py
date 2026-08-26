@@ -9,6 +9,7 @@ from backend.app.schemas.pedido_schemas import (
     OrderCreate, OrderOut, OrderListItemOut, PaginatedOrdersOut,
 )
 from backend.app.services import pedido_service
+from backend.app.api.depedencias import get_current_client, AuthenticatedClient
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
 
@@ -17,10 +18,9 @@ router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
 def criar_pedido(
     payload: OrderCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_client: AuthenticatedClient = Depends(get_current_client),
 ):
-    pedido = pedido_service.criar_pedido(db, payload, current_user.restaurant_id)
-    return pedido
+    return pedido_service.criar_pedido(db, payload, current_client)
 
 
 @router.get("", response_model=PaginatedOrdersOut)

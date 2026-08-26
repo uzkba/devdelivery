@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
 from backend.app.core.database import get_db
-from backend.app.core.seguranca import hash_password
+from backend.app.core.seguranca import hash_password, create_access_token as create_access_token_cliente
 from backend.main import app
 from backend.app.model.models import Client, CustomerAddress
 from backend.app.routers.autenticacao_route import create_access_token
@@ -27,6 +27,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
+@pytest.fixture()
+def token_para_cliente(db):
+    def _token_para_cliente(cliente) -> str:
+        return create_access_token(data={"sub": str(cliente.id), "type": "client"})
+    return _token_para_cliente
 
 @pytest.fixture(scope="session", autouse=True)
 def _aplicar_migrations():
@@ -122,7 +128,11 @@ def inactive_admin_with_admin_role(db, restaurante):
 
 @pytest.fixture()
 def cliente(db):
-    c = Client(name="José da Silva", phone="11999990000")
+    c = Client(
+        name="José da Silva",
+        phone="11999990000",
+        hashed_password=hash_password("senha123"),
+    )
     db.add(c)
     db.flush()
     db.refresh(c)
@@ -131,7 +141,11 @@ def cliente(db):
 
 @pytest.fixture()
 def outro_cliente(db):
-    c = Client(name="Ana Souza", phone="11988880000")
+    c = Client(
+        name="Ana Souza",
+        phone="11988880000",
+        hashed_password=hash_password("senha123"),
+    )
     db.add(c)
     db.flush()
     db.refresh(c)
