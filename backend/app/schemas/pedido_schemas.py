@@ -44,6 +44,7 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
     cliente_id: uuid.UUID = Field(validation_alias="client_id")
+    cliente: ClienteResumoOut = Field(validation_alias="client")
     status_id: uuid.UUID = Field(validation_alias="status_id")
     data_hora: datetime = Field(validation_alias="order_datetime")
 
@@ -54,6 +55,33 @@ class OrderOut(BaseModel):
     valor_itens: Decimal = Field(validation_alias="items_amount")
     valor_entrega: Decimal = Field(validation_alias="delivery_fee")
     valor_total: Decimal = Field(validation_alias="total_amount")
-    valor_troco: Optional[Decimal] = Field(default=None, validation_alias="change_amount") # <-- CORRIGIDO AQUI!
+    valor_troco: Optional[Decimal] = Field(default=None, validation_alias="change_amount")
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+
+    itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+
+class OrderListItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True) 
+    id: uuid.UUID
+    numero_pedido: int = Field(validation_alias="order_number")
+    cliente_id: uuid.UUID = Field(validation_alias="client_id")
+    cliente_nome: str
+    status_id: uuid.UUID
+    data_hora: datetime = Field(validation_alias="order_datetime")
+    valor_total: Decimal = Field(validation_alias="total_amount")
+
+
+class PaginatedOrdersOut(BaseModel):
+    items: List[OrderListItemOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class ClienteResumoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nome: str = Field(validation_alias="name")
+    telefone: str = Field(validation_alias="phone")

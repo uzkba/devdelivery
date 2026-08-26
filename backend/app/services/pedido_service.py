@@ -147,10 +147,61 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         raise HTTPException(status_code=500, detail="Erro ao registrar o pedido.")
 
     db.refresh(novo_pedido)
-    return novo_pedido
+    return _anexar_cliente(db, novo_pedido)
 
 def buscar_pedido_por_id(db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.UUID) -> Order:
-    pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
+       pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
+       if not pedido:
+           raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+       return _anexar_cliente(db, pedido)
+
+def listar_pedidos(
+    db: Session,
+    restaurant_id: uuid.UUID,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[tuple[Order, str]], int]:
+    """Fila de pedidos do restaurante, do mais antigo para o mais novo (painel)."""
+    query = (
+        db.query(Order, Client.name)
+        .join(Client, Client.id == Order.client_id)
+        .filter(Order.restaurant_id == restaurant_id)
+    )
+    total = query.count()
+    resultados = (
+        query.order_by(Order.order_datetime.asc(), Order.order_number.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return resultados, total
+
+
+def listar_pedidos_cliente(
+    db: Session,
+    client_id: uuid.UUID,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[tuple[Order, str]], int]:
+    """Histórico do cliente — só os pedidos vinculados ao próprio client_id."""
+    query = (
+        db.query(Order, Client.name)
+        .join(Client, Client.id == Order.client_id)
+        .filter(Order.client_id == client_id)
+    )
+    total = query.count()
+    resultados = (
+        query.order_by(Order.order_datetime.desc(), Order.order_number.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return resultados, total
+
+def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.UUID) -> Order:
+    """Detalhe do pedido para o cliente — só se o pedido for dele mesmo."""
+    pedido = db.query(Order).filter_by(id=pedido_id, client_id=client_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+    pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()  # <-- FIX
     return pedido
