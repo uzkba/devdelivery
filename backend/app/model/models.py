@@ -85,6 +85,7 @@ class OrderStatus(Base):
     code: Mapped[str] = mapped_column("codigo", String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column("nome", String(50), nullable=False)
     order: Mapped[int] = mapped_column("ordem", Integer, nullable=False)
+    is_paid: Mapped[bool] = mapped_column("pago", Boolean, default=False, nullable=False)
     is_final: Mapped[bool] = mapped_column("is_final", Boolean, default=False, nullable=False)
 
 
@@ -220,6 +221,9 @@ class CashClosing(Base):
     total_cash: Mapped[Decimal] = mapped_column("total_dinheiro", Numeric(10, 2), default=0, nullable=False)
     total_debit: Mapped[Decimal] = mapped_column("total_debito", Numeric(10, 2), default=0, nullable=False)
     total_credit: Mapped[Decimal] = mapped_column("total_credito", Numeric(10, 2), default=0, nullable=False)
+    total_other: Mapped[Decimal] = mapped_column("total_outros", Numeric(10, 2), default=0, nullable=False)
+    total_cash_paid: Mapped[Decimal] = mapped_column("total_dinheiro_recebido", Numeric(10, 2), default=0, nullable=False)
+    total_change: Mapped[Decimal] = mapped_column("total_troco", Numeric(10, 2), default=0, nullable=False)
     order_count: Mapped[int] = mapped_column("quantidade_pedidos", Integer, default=0, nullable=False)
     cancelled_count: Mapped[int] = mapped_column("quantidade_cancelados", Integer, default=0, nullable=False)
     expected_amount: Mapped[Decimal] = mapped_column("valor_esperado", Numeric(10, 2), default=0, nullable=False)
@@ -230,8 +234,9 @@ class CashClosing(Base):
     notes: Mapped[str | None] = mapped_column("observacoes", Text)
 
     __table_args__ = (
-        CheckConstraint("data_fim >= data_inicio", name="ck_fechamento_periodo_valido"),
-    )
+    CheckConstraint("data_fim >= data_inicio", name="ck_fechamento_periodo_valido"),
+    UniqueConstraint("restaurante_id", "data_inicio", "data_fim", name="uq_fechamento_restaurante_periodo"),
+)
 
 class Order(Base):
     __tablename__ = "pedido"
@@ -257,7 +262,6 @@ class Order(Base):
     total_amount: Mapped[Decimal] = mapped_column("valor_total", Numeric(10, 2), nullable=False)
     cash_paid_amount: Mapped[Decimal | None] = mapped_column("valor_pago_dinheiro", Numeric(10, 2))
     change_amount: Mapped[Decimal | None] = mapped_column("valor_troco", Numeric(10, 2))
-    cash_closing_id: Mapped[uuid.UUID | None] = mapped_column("fechamento_caixa_id", ForeignKey("fechamento_caixa.id"))
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
