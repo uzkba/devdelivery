@@ -280,10 +280,12 @@ def status_criado(db):
 
 @pytest.fixture()
 def forma_pagamento_dinheiro(db):
-    fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
-    db.add(fp)
-    db.flush()
-    db.refresh(fp)
+    fp = db.query(PaymentMethod).filter_by(code="DINHEIRO").first()
+    if fp is None:
+        fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
+        db.add(fp)
+        db.flush()
+        db.refresh(fp)
     return fp
 
 @pytest.fixture()
@@ -308,3 +310,17 @@ def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, s
     db.flush()
     db.refresh(pedido)
     return pedido
+
+def _get_or_create_status(db, code, name, order, is_final):
+    status = db.query(OrderStatus).filter_by(code=code).first()
+    if status is None:
+        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
+        db.add(status)
+        db.flush()
+        db.refresh(status)
+    return status
+
+
+@pytest.fixture()
+def status_criado(db):
+    return _get_or_create_status(db, "CRIADO", "Criado", 1, False)

@@ -13,6 +13,7 @@ class OrderItemCreate(BaseModel):
     quantidade: int = Field(default=1, gt=0)
     observacoes: Optional[str] = None
     opcoes_selecionadas: List[OrderItemOptionCreate] = []
+    
 class OrderCreate(BaseModel):
     restaurante_id: uuid.UUID
     endereco_id: uuid.UUID
@@ -20,6 +21,7 @@ class OrderCreate(BaseModel):
     valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0)
     itens: List[OrderItemCreate] = Field(..., min_length=1)
     observacoes: Optional[str] = None
+
 class OrderItemOptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -76,6 +78,7 @@ class OrderListItemOut(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
+
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]
     total: int

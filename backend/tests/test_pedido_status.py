@@ -1,6 +1,7 @@
 import uuid
 from backend.app.model.models import OrderStatus, OrderStatusHistory
 import pytest
+from backend.tests.conftest import _get_or_create_status
 
 
 def _headers(client, login: str, password: str = "senha123") -> dict:
@@ -11,20 +12,12 @@ def _headers(client, login: str, password: str = "senha123") -> dict:
 
 @pytest.fixture()
 def status_em_preparacao(db):
-    status = OrderStatus(code="EM_PREPARACAO", name="Em preparação", order=2, is_final=False)
-    db.add(status)
-    db.flush()
-    db.refresh(status)
-    return status
+    return _get_or_create_status(db, "EM_PREPARACAO", "Em preparação", 2, False)
 
 
 @pytest.fixture()
 def status_cancelado(db):
-    status = OrderStatus(code="CANCELADO", name="Cancelado", order=6, is_final=True)
-    db.add(status)
-    db.flush()
-    db.refresh(status)
-    return status
+    return _get_or_create_status(db, "CANCELADO", "Cancelado", 6, True)
 
 
 def test_atualizar_status_sucesso(
