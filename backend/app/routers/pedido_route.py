@@ -9,6 +9,8 @@ from backend.app.schemas.pedido_schemas import (
     OrderCreate, OrderOut, OrderListItemOut, PaginatedOrdersOut,
 )
 from backend.app.services import pedido_service
+from backend.app.api.depedencias import require_role
+from backend.app.schemas.pedido_schemas import OrderCreate, OrderOut, OrderStatusUpdate
 from backend.app.api.depedencias import get_current_client, AuthenticatedClient
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
@@ -91,3 +93,14 @@ def buscar_pedido(
     """Detalhe do pedido pro painel do restaurante (staff autenticado)."""
     pedido = pedido_service.buscar_pedido_por_id(db, pedido_id, current_user.restaurant_id)
     return pedido
+
+@router.patch("/{pedido_id}/status", response_model=OrderOut)
+def atualizar_status_pedido(
+    pedido_id: uuid.UUID,
+    payload: OrderStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("admin", "atendente")),
+):
+    return pedido_service.atualizar_status_pedido(
+        db, pedido_id, payload.novo_status, current_user.restaurant_id, current_user.id
+    )

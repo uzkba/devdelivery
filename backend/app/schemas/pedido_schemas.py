@@ -72,6 +72,10 @@ class OrderListItemOut(BaseModel):
     valor_total: Decimal = Field(validation_alias="total_amount")
 
 
+    itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+
+class OrderStatusUpdate(BaseModel):
+    novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]
     total: int
