@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
 from backend.app.core.database import get_db
-from backend.app.core.seguranca import hash_password
+from backend.app.core.seguranca import hash_password, create_access_token as create_access_token_cliente
 from backend.main import app
 from backend.app.model.models import Client, CustomerAddress
 from backend.app.routers.autenticacao_route import create_access_token
@@ -28,13 +28,15 @@ engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+@pytest.fixture()
+def token_para_cliente(db):
+    def _token_para_cliente(cliente) -> str:
+        return create_access_token(data={"sub": str(cliente.id), "type": "client"})
+    return _token_para_cliente
+
 @pytest.fixture(scope="session", autouse=True)
 def _aplicar_migrations():
-    """Roda `alembic upgrade head` uma vez, no início da sessão de testes,
-    antes de qualquer fixture que use o banco. Evita depender de cada
-    dev lembrar de rodar isso manualmente (foi exatamente o que causou
-    os erros de "coluna não existe" na task de categoria de alimento)."""
-    project_root = Path(__file__).resolve().parents[2]  # conftest.py -> tests/ -> backend/ -> raiz
+    project_root = Path(__file__).resolve().parents[2]
     alembic_cfg = Config(str(project_root / "alembic.ini"))
     alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(alembic_cfg, "head")
@@ -126,7 +128,11 @@ def inactive_admin_with_admin_role(db, restaurante):
 
 @pytest.fixture()
 def cliente(db):
-    c = Client(name="José da Silva", phone="11999990000")
+    c = Client(
+        name="José da Silva",
+        phone="11999990000",
+        hashed_password=hash_password("senha123"),
+    )
     db.add(c)
     db.flush()
     db.refresh(c)
@@ -135,7 +141,11 @@ def cliente(db):
 
 @pytest.fixture()
 def outro_cliente(db):
-    c = Client(name="Ana Souza", phone="11988880000")
+    c = Client(
+        name="Ana Souza",
+        phone="11988880000",
+        hashed_password=hash_password("senha123"),
+    )
     db.add(c)
     db.flush()
     db.refresh(c)
@@ -232,3 +242,28 @@ def token_para(db):
             }
         )
     return _token_para
+
+@pytest.fixture()
+def outro_restaurante(db):
+    """Fixture global de um segundo restaurante para testes multi-tenant."""
+    r = Restaurant(trade_name="Marmitas do Zé (Restaurante B)")
+    db.add(r)
+    db.flush()
+    db.refresh(r)
+    return r
+
+@pytest.fixture()
+def outro_admin_user(db, outro_restaurante):
+    """Fixture global de um admin pertencente ao segundo restaurante."""
+    user = AdminUser(
+        restaurant_id=outro_restaurante.id,
+        name="Zé Admin",
+        login="ze.admin.cardapio",
+        password_hash=hash_password("senha123"),
+        role="admin",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user

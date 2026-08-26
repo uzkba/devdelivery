@@ -7,16 +7,7 @@ depois Authorization: Bearer <token> nas chamadas autenticadas.
 
 Reaproveita as fixtures já existentes no conftest.py (client, db, restaurante,
 admin_user, atendente_user, caixa_user, entregador_user,
-inactive_admin_with_admin_role). Como ainda não existem fixtures de
-Menu/MenuItem/Food/FoodCategory no conftest.py compartilhado, defini-as
-localmente aqui (mesmo padrão de `outro_restaurante`/`outro_admin_user` em
-test_categoria_alimento.py) — se preferirem, dá pra mover pro conftest.py
-depois.
-
-Nota sobre `GET /cardapio/hoje`: essa rota ainda usa um restaurante
-"placeholder" fixo (RESTAURANTE_ID_PADRAO, ver TODO em cardapio_route.py),
-já que não existe contexto de restaurante para rotas públicas ainda. Os
-testes dessa rota criam o restaurante explicitamente com esse UUID fixo.
+inactive_admin_with_admin_role).
 """
 import uuid
 from datetime import date, timedelta
@@ -38,11 +29,6 @@ def _headers(client, login: str, password: str = "senha123") -> dict:
 
 
 def _headers_via_token_direto(user) -> dict:
-    """Gera o header de Authorization direto com create_access_token, sem passar
-    por /auth/login. Necessário para simular um usuário que ficou inativo DEPOIS
-    de ter um token válido emitido — /auth/login já bloqueia o login de usuário
-    inativo antes de gerar token, então não dá pra testar esse caso via login
-    (mesmo padrão usado em test_admin.py)."""
     token = create_access_token(
         data={
             "sub": str(user.id),
@@ -56,8 +42,7 @@ def _headers_via_token_direto(user) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# fixtures locais (cardápio do dia com 1 item disponível + segundo
-# restaurante, para testar isolamento multi-tenant)
+# fixtures locais (cardápio do dia)
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def categoria(db, restaurante):
@@ -98,32 +83,6 @@ def item_cardapio(db, cardapio_hoje, alimento):
     db.flush()
     db.refresh(item)
     return item
-
-
-@pytest.fixture()
-def outro_restaurante(db):
-    r = Restaurant(trade_name="Marmitas do Zé")
-    db.add(r)
-    db.flush()
-    db.refresh(r)
-    return r
-
-
-@pytest.fixture()
-def outro_admin_user(db, outro_restaurante):
-    user = AdminUser(
-        restaurant_id=outro_restaurante.id,
-        name="Zé Admin",
-        login="ze.admin.cardapio",
-        password_hash=hash_password("senha123"),
-        role="admin",
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    db.refresh(user)
-    return user
-
 
 # ---------------------------------------------------------------------------
 class TestAlterarDisponibilidade:
@@ -182,8 +141,6 @@ class TestAlterarDisponibilidade:
         assert response.status_code == 404
 
     def test_nao_altera_item_de_outro_restaurante(self, client, outro_admin_user, item_cardapio, cardapio_hoje):
-        """Isolamento multi-tenant: usuário de outro restaurante não pode
-        alterar um item que pertence ao cardápio de outro restaurante."""
         headers = _headers(client, "ze.admin.cardapio")
         response = client.patch(self._url(cardapio_hoje, item_cardapio), json={"is_available": False}, headers=headers)
         assert response.status_code == 404
@@ -215,7 +172,6 @@ class TestAuditoriaDisponibilidade:
 
     def test_valor_igual_nao_duplica_log(self, client, db, admin_user, item_cardapio, cardapio_hoje):
         headers = _headers(client, "maria.admin")
-        # item já está disponível=True; enviar True de novo não deve gerar log
         client.patch(
             f"/cardapio/{cardapio_hoje.id}/itens/{item_cardapio.id}/disponibilidade",
             json={"is_available": True},
@@ -230,11 +186,6 @@ class TestAuditoriaDisponibilidade:
 
 
 class TestCardapioDoDia:
-    """Testa GET /cardapio/hoje (rota pública). Como a rota ainda depende do
-    RESTAURANTE_ID_PADRAO fixo (ver TODO em cardapio_route.py), o restaurante
-    é criado explicitamente com esse UUID — isso deve ser revisitado quando
-    o contexto de restaurante for definido de verdade (ver roadmap)."""
-
     def test_lista_apenas_itens_disponiveis(self, db, client):
         restaurante_padrao = Restaurant(id=RESTAURANTE_ID_PADRAO, trade_name="Restaurante Placeholder")
         db.add(restaurante_padrao)
@@ -271,28 +222,9 @@ class TestCardapioDoDia:
         response = client.get("/cardapio/hoje")
         assert response.status_code == 404
 
-        # --- novo (task #16 — Gestão do Cardápio do Dia) --------------------------
 
 @pytest.fixture()
-def categoria_marmita(db, restaurante):
-    c = FoodCategory(restaurant_id=restaurante.id, name="Marmita", is_main_dish=True)
-    db.add(c)
-    db.flush()
-    db.refresh(c)
-    return c
-
-
-@pytest.fixture()
-def alimento_marmita(db, restaurante, categoria_marmita):
-    a = Food(restaurant_id=restaurante.id, category_id=categoria_marmita.id, name="Marmita Tradicional", base_price=Decimal("0"))
-    db.add(a)
-    db.flush()
-    db.refresh(a)
-    return a
-
-
-@pytest.fixture()
-def alimento_refrigerante(db, restaurante, categoria):
+def alimento_basico(db, restaurante, categoria):
     a = Food(restaurant_id=restaurante.id, category_id=categoria.id, name="Refrigerante Lata", base_price=Decimal("6"))
     db.add(a)
     db.flush()
@@ -309,12 +241,6 @@ def alimento_inativo(db, restaurante, categoria):
     return a
 
 
-def _criar_tamanho(client, headers, nome="Grande"):
-    response = client.post("/tamanhos-marmita", json={"nome": nome, "ordem_exibicao": 0}, headers=headers)
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
 class TestCriarCardapio:
     def test_criar_cardapio_com_sucesso(self, client, admin_user):
         headers = _headers(client, "maria.admin")
@@ -325,8 +251,6 @@ class TestCriarCardapio:
 
     def test_criar_cardapio_duplicado_na_mesma_data_falha(self, client, admin_user):
         headers = _headers(client, "maria.admin")
-        # já existe um cardápio de hoje criado pela fixture cardapio_hoje em
-        # outros testes desta classe — usa uma data futura pra não colidir
         data_teste = str(date.today().replace(day=1))
         client.post("/cardapio", json={"data": data_teste}, headers=headers)
         response = client.post("/cardapio", json={"data": data_teste}, headers=headers)
@@ -349,56 +273,20 @@ class TestBuscarCardapioNovo:
 
 
 class TestAdicionarItensNovo:
-    def test_adicionar_prato_principal_com_tamanho_funciona(self, client, admin_user, alimento_marmita):
+    def test_adicionar_item_simples_funciona(self, client, admin_user, alimento_basico):
         headers = _headers(client, "maria.admin")
         cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
-        tamanho = _criar_tamanho(client, headers, "Grande")
 
         response = client.post(
             f"/cardapio/{cardapio['id']}/itens",
-            json={"itens": [{"alimento_id": str(alimento_marmita.id), "tamanho_id": tamanho["id"], "preco_dia": "25.00"}]},
+            json={"itens": [{"alimento_id": str(alimento_basico.id), "preco_dia": "5.50"}]},
             headers=headers,
         )
         assert response.status_code == 201
-        itens = response.json()["itens"]
-        assert itens[0]["tamanho_id"] == tamanho["id"]
-
-    def test_adicionar_adicional_sem_tamanho_funciona(self, client, admin_user, alimento_refrigerante):
-        headers = _headers(client, "maria.admin")
-        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
-
-        response = client.post(
-            f"/cardapio/{cardapio['id']}/itens",
-            json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]},
-            headers=headers,
-        )
-        assert response.status_code == 201
-        assert response.json()["itens"][0]["tamanho_id"] is None
-
-    def test_adicionar_prato_principal_sem_tamanho_falha(self, client, admin_user, alimento_marmita):
-        headers = _headers(client, "maria.admin")
-        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
-
-        response = client.post(
-            f"/cardapio/{cardapio['id']}/itens",
-            json={"itens": [{"alimento_id": str(alimento_marmita.id)}]},
-            headers=headers,
-        )
-        assert response.status_code == 400
-        assert "exige um tamanho" in response.json()["detail"].lower()
-
-    def test_adicionar_adicional_com_tamanho_falha(self, client, admin_user, alimento_refrigerante):
-        headers = _headers(client, "maria.admin")
-        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
-        tamanho = _criar_tamanho(client, headers, "Grande")
-
-        response = client.post(
-            f"/cardapio/{cardapio['id']}/itens",
-            json={"itens": [{"alimento_id": str(alimento_refrigerante.id), "tamanho_id": tamanho["id"]}]},
-            headers=headers,
-        )
-        assert response.status_code == 400
-        assert "não deve ter tamanho" in response.json()["detail"].lower()
+        
+        item_cadastrado = response.json()["itens"][0]
+        assert item_cadastrado["alimento_id"] == str(alimento_basico.id)
+        assert Decimal(item_cadastrado["preco_dia"]) == Decimal("5.50")
 
     def test_adicionar_alimento_inativo_falha(self, client, admin_user, alimento_inativo):
         headers = _headers(client, "maria.admin")
@@ -410,11 +298,31 @@ class TestAdicionarItensNovo:
             headers=headers,
         )
         assert response.status_code == 400
+        assert "inativo" in response.json()["detail"].lower()
 
-    def test_adicionar_alimento_ja_existente_no_cardapio_falha(self, client, admin_user, alimento_refrigerante):
+    def test_adicionar_alimento_ja_existente_no_cardapio_falha(self, client, admin_user, alimento_basico):
         headers = _headers(client, "maria.admin")
         cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
 
-        client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]}, headers=headers)
-        response = client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_refrigerante.id)}]}, headers=headers)
+        client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_basico.id)}]}, headers=headers)
+        response = client.post(f"/cardapio/{cardapio['id']}/itens", json={"itens": [{"alimento_id": str(alimento_basico.id)}]}, headers=headers)
+        
         assert response.status_code == 400
+        assert "já estão cadastrados" in response.json()["detail"].lower()
+        
+    def test_adicionar_alimento_duplicado_no_mesmo_payload_falha(self, client, admin_user, alimento_basico):
+        headers = _headers(client, "maria.admin")
+        cardapio = client.post("/cardapio", json={"data": str(date.today())}, headers=headers).json()
+
+        # Envia duas vezes o mesmo alimento na mesma requisição
+        response = client.post(
+            f"/cardapio/{cardapio['id']}/itens", 
+            json={"itens": [
+                {"alimento_id": str(alimento_basico.id)},
+                {"alimento_id": str(alimento_basico.id)}
+            ]}, 
+            headers=headers
+        )
+        
+        assert response.status_code == 400
+        assert "mais de uma vez" in response.json()["detail"].lower()
