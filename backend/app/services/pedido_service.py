@@ -232,13 +232,6 @@ def atualizar_status_pedido(
             detail=f"Pedido está em status final ('{status_atual.code}') e não pode mudar mais.",
         )
 
-    # RN16 — pedido já vinculado a um fechamento de caixa é imutável
-    if pedido.cash_closing_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Pedido já vinculado a um fechamento de caixa; status não pode ser alterado.",
-        )
-
     if status_atual and status_atual.id == novo_status.id:
         raise HTTPException(status_code=400, detail="O pedido já está neste status.")
 
