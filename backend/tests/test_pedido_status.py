@@ -1,0 +1,105 @@
+import uuid
+from backend.app.model.models import OrderStatus, OrderStatusHistory
+import pytest
+
+
+def _headers(client, login: str, password: str = "senha123") -> dict:
+    response = client.post("/auth/login", json={"login": login, "password": password})
+    assert response.status_code == 200, f"Login falhou: {response.text}"
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture()
+def status_em_preparacao(db):
+    status = OrderStatus(code="EM_PREPARACAO", name="Em preparação", order=2, is_final=False)
+    db.add(status)
+    db.flush()
+    db.refresh(status)
+    return status
+
+
+@pytest.fixture()
+def status_cancelado(db):
+    status = OrderStatus(code="CANCELADO", name="Cancelado", order=6, is_final=True)
+    db.add(status)
+    db.flush()
+    db.refresh(status)
+    return status
+
+
+def test_atualizar_status_sucesso(
+    client, db, admin_user, pedido_teste, status_em_preparacao
+):
+    headers = _headers(client, "maria.admin")
+    resp = client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "EM_PREPARACAO"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+    historico = db.query(OrderStatusHistory).filter_by(order_id=pedido_teste.id).all()
+    assert len(historico) == 1
+    assert historico[0].new_status_id == status_em_preparacao.id
+
+
+def test_status_inexistente_retorna_404(client, admin_user, pedido_teste):
+    headers = _headers(client, "maria.admin")
+    resp = client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "NAO_EXISTE"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_pedido_inexistente_retorna_404(client, admin_user, status_em_preparacao):
+    headers = _headers(client, "maria.admin")
+    resp = client.patch(
+        f"/pedidos/{uuid.uuid4()}/status",
+        json={"novo_status": "EM_PREPARACAO"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_nao_permite_transicao_apos_status_final(
+    client, admin_user, pedido_teste, status_cancelado, status_em_preparacao
+):
+    headers = _headers(client, "maria.admin")
+
+    client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "CANCELADO"},
+        headers=headers,
+    )
+
+    resp = client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "EM_PREPARACAO"},
+        headers=headers,
+    )
+    assert resp.status_code == 400
+
+
+def test_caixa_nao_pode_alterar_status(client, caixa_user, pedido_teste, status_em_preparacao):
+    headers = _headers(client, "carlos.caixa")
+    resp = client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "EM_PREPARACAO"},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
+def test_isolamento_entre_restaurantes(
+    client, admin_user, outro_admin_user, pedido_teste, status_em_preparacao
+):
+    """Pedido é do restaurante da Maria; Zé (outro restaurante) não pode alterá-lo."""
+    headers_ze = _headers(client, "ze.admin.cardapio")
+    resp = client.patch(
+        f"/pedidos/{pedido_teste.id}/status",
+        json={"novo_status": "EM_PREPARACAO"},
+        headers=headers_ze,
+    )
+    assert resp.status_code == 404
