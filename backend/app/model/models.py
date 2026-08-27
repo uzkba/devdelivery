@@ -353,4 +353,7 @@ class AuditLog(Base):
     new_data: Mapped[dict | None] = mapped_column("dados_novos", JSONB)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
 
-    __table_args__ = (Index("idx_log_auditoria_entidade", "entidade", "entidade_id"),)
+    __table_args__ = (
+        Index("idx_log_auditoria_entidade", "entidade", "entidade_id"),
+        Index("idx_log_auditoria_restaurante_periodo", "restaurante_id", "criado_em"),
+    )
