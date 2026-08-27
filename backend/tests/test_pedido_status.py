@@ -20,9 +20,8 @@ def status_cancelado(db):
     return _get_or_create_status(db, "CANCELADO", "Cancelado", 6, True)
 
 
-def test_atualizar_status_sucesso(
-    client, db, admin_user, pedido_teste, status_em_preparacao
-):
+def test_atualizar_status_sucesso(client, db, pedido_teste, status_em_preparacao, admin_user):
+    # Agora a maria.admin existe no banco de dados antes dessa linha executar!
     headers = _headers(client, "maria.admin")
     resp = client.patch(
         f"/pedidos/{pedido_teste.id}/status",
@@ -56,9 +55,7 @@ def test_pedido_inexistente_retorna_404(client, admin_user, status_em_preparacao
     assert resp.status_code == 404
 
 
-def test_nao_permite_transicao_apos_status_final(
-    client, admin_user, pedido_teste, status_cancelado, status_em_preparacao
-):
+def test_nao_permite_transicao_apos_status_final(client, pedido_teste, admin_user, status_cancelado, status_em_preparacao):
     headers = _headers(client, "maria.admin")
 
     client.patch(
@@ -72,6 +69,8 @@ def test_nao_permite_transicao_apos_status_final(
         json={"novo_status": "EM_PREPARACAO"},
         headers=headers,
     )
+
+    print("\nERRO DA API:", resp.json())
     assert resp.status_code == 400
 
 

@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import uuid
+from decimal import Decimal
+from alembic.util import status
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -394,29 +396,6 @@ def algum_log_de_alimento(db, restaurante, admin_user):
     db.flush()
     db.refresh(log)
     return log
-def status_criado(db):
-    return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
-
-# ── Adições ao conftest.py para a suíte de Fechamento de Caixa ──
-# Cole essas fixtures junto das demais no conftest.py existente.
-# Reaproveita o padrão de status_criado/forma_pagamento_dinheiro/pedido_teste já existentes.
-
-import pytest
-from datetime import datetime
-from decimal import Decimal
-
-from backend.app.model.models import Order, OrderStatus, PaymentMethod
-
-
-def _get_or_create_status(db, code, name, order, is_final):
-    status = db.query(OrderStatus).filter_by(code=code).first()
-    if status is None:
-        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
-        db.add(status)
-        db.flush()
-        db.refresh(status)
-    return status
-
 
 def _get_or_create_payment_method(db, code, name):
     fp = db.query(PaymentMethod).filter_by(code=code).first()
@@ -426,7 +405,6 @@ def _get_or_create_payment_method(db, code, name):
         db.flush()
         db.refresh(fp)
     return fp
-
 
 @pytest.fixture()
 def status_entregue(db):
