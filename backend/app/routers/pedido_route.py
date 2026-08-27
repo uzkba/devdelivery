@@ -32,7 +32,6 @@ def listar_pedidos(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    """Fila de pedidos ativos do restaurante (painel)."""
     resultados, total = pedido_service.listar_pedidos(
         db, current_user.restaurant_id, page, page_size
     )
@@ -57,7 +56,6 @@ def listar_meus_pedidos(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Histórico do cliente — restrito ao próprio client_id."""
     resultados, total = pedido_service.listar_pedidos_cliente(db, client_id, page, page_size)
     items = [
         OrderListItemOut(
@@ -79,7 +77,6 @@ def buscar_pedido_do_cliente(
     client_id: uuid.UUID = Query(..., description="ID do cliente (ainda sem login de cliente)"),
     db: Session = Depends(get_db),
 ):
-    """Detalhe do pedido pro cliente — sem staff logado, só confirma posse do pedido."""
     pedido = pedido_service.buscar_pedido_do_cliente(db, pedido_id, client_id)
     return pedido
 
@@ -90,7 +87,6 @@ def buscar_pedido(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Detalhe do pedido pro painel do restaurante (staff autenticado)."""
     pedido = pedido_service.buscar_pedido_por_id(db, pedido_id, current_user.restaurant_id)
     return pedido
 
