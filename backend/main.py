@@ -11,6 +11,7 @@ from backend.app.routers import (
     pedido_route,
     auditoria_route,
     teste,
+    fechamento_caixa_route,
 )
 
 app = FastAPI(
