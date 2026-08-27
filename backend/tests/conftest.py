@@ -1,11 +1,12 @@
 from pathlib import Path
 
+import uuid
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant
+from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
 import os
 from dotenv import load_dotenv
 
@@ -34,6 +35,7 @@ def token_para_cliente(db):
         return create_access_token(data={"sub": str(cliente.id), "type": "client"})
     return _token_para_cliente
 
+
 @pytest.fixture(scope="session", autouse=True)
 def _aplicar_migrations():
     project_root = Path(__file__).resolve().parents[2]
@@ -44,10 +46,29 @@ def _aplicar_migrations():
 
 @pytest.fixture(scope="function")
 def db():
-    """Cria uma conexão e uma transação isolada para cada teste."""
+    """
+    Cria uma conexão e uma transação isolada para cada teste.
+
+    Usa o padrão de SAVEPOINT (nested transaction) em vez de depender só
+    de connection.begin()/rollback(): os services chamam session.commit()
+    de dentro da aplicação (ex: criar_pedido, criar_alimento), e um commit
+    "normal" numa session vinculada direto à connection encerraria a
+    transação externa de verdade — fazendo o rollback do teardown virar
+    no-op e vazando dados de teste pro banco. O listener abaixo reabre
+    um SAVEPOINT toda vez que o código sob teste comita, então o
+    transaction.rollback() final sempre tem o que desfazer.
+    """
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
+
+    nested = connection.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def _reiniciar_savepoint(session, transaction):
+        nonlocal nested
+        if not nested.is_active:
+            nested = connection.begin_nested()
 
     yield session
 
@@ -111,6 +132,7 @@ def inactive_admin_user(db, restaurante):
     db.refresh(user)
     return user
 
+
 @pytest.fixture()
 def inactive_admin_with_admin_role(db, restaurante):
     user = AdminUser(
@@ -125,6 +147,7 @@ def inactive_admin_with_admin_role(db, restaurante):
     db.flush()
     db.refresh(user)
     return user
+
 
 @pytest.fixture()
 def cliente(db):
@@ -229,6 +252,7 @@ def entregador_user(db, restaurante):
     db.refresh(user)
     return user
 
+
 @pytest.fixture()
 def token_para(db):
     def _token_para(user) -> str:
@@ -243,6 +267,7 @@ def token_para(db):
         )
     return _token_para
 
+
 @pytest.fixture()
 def outro_restaurante(db):
     """Fixture global de um segundo restaurante para testes multi-tenant."""
@@ -251,6 +276,7 @@ def outro_restaurante(db):
     db.flush()
     db.refresh(r)
     return r
+
 
 @pytest.fixture()
 def outro_admin_user(db, outro_restaurante):
@@ -268,14 +294,21 @@ def outro_admin_user(db, outro_restaurante):
     db.refresh(user)
     return user
 
+
+def _get_or_create_status(db, code, name, order, is_final):
+    status = db.query(OrderStatus).filter_by(code=code).first()
+    if status is None:
+        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
+        db.add(status)
+        db.flush()
+        db.refresh(status)
+    return status
+
+
 @pytest.fixture()
 def status_criado(db):
     """Garante que existe o status inicial do pedido."""
-    status = OrderStatus(code="CRIADO", name="Criado", order=1, is_final=False)
-    db.add(status)
-    db.flush()
-    db.refresh(status)
-    return status
+    return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
 
 
 @pytest.fixture()
@@ -288,10 +321,10 @@ def forma_pagamento_dinheiro(db):
         db.refresh(fp)
     return fp
 
+
 @pytest.fixture()
 def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, status_criado):
     """Pedido básico no status inicial, pronto pra testar transições de status."""
-
     pedido = Order(
         restaurant_id=restaurante.id,
         client_id=cliente.id,
@@ -311,16 +344,53 @@ def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, s
     db.refresh(pedido)
     return pedido
 
-def _get_or_create_status(db, code, name, order, is_final):
-    status = db.query(OrderStatus).filter_by(code=code).first()
-    if status is None:
-        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
-        db.add(status)
-        db.flush()
-        db.refresh(status)
-    return status
+
+@pytest.fixture()
+def log_do_outro_restaurante(db, outro_restaurante):
+    log = AuditLog(
+        restaurant_id=outro_restaurante.id,
+        user_id=None,
+        entity="alimento",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"nome": "Prato de outro restaurante"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
 
 
 @pytest.fixture()
-def status_criado(db):
-    return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
+def algum_log_de_pedido(db, restaurante):
+    log = AuditLog(
+        restaurant_id=restaurante.id,
+        user_id=None,
+        entity="pedido",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"total_amount": "25.90"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
+
+
+@pytest.fixture()
+def algum_log_de_alimento(db, restaurante, admin_user):
+    log = AuditLog(
+        restaurant_id=restaurante.id,
+        user_id=admin_user.id,
+        entity="alimento",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"nome": "Feijoada"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
