@@ -324,3 +324,93 @@ def _get_or_create_status(db, code, name, order, is_final):
 @pytest.fixture()
 def status_criado(db):
     return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
+
+# ── Adições ao conftest.py para a suíte de Fechamento de Caixa ──
+# Cole essas fixtures junto das demais no conftest.py existente.
+# Reaproveita o padrão de status_criado/forma_pagamento_dinheiro/pedido_teste já existentes.
+
+import pytest
+from datetime import datetime
+from decimal import Decimal
+
+from backend.app.model.models import Order, OrderStatus, PaymentMethod
+
+
+def _get_or_create_status(db, code, name, order, is_final):
+    status = db.query(OrderStatus).filter_by(code=code).first()
+    if status is None:
+        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
+        db.add(status)
+        db.flush()
+        db.refresh(status)
+    return status
+
+
+def _get_or_create_payment_method(db, code, name):
+    fp = db.query(PaymentMethod).filter_by(code=code).first()
+    if fp is None:
+        fp = PaymentMethod(code=code, name=name, is_active=True)
+        db.add(fp)
+        db.flush()
+        db.refresh(fp)
+    return fp
+
+
+@pytest.fixture()
+def status_entregue(db):
+    # já vem seedado pela migration com pago=True — is_final=True
+    return _get_or_create_status(db, "ENTREGUE", "Entregue", 5, True)
+
+
+@pytest.fixture()
+def status_cancelado(db):
+    return _get_or_create_status(db, "CANCELADO", "Cancelado", 6, True)
+
+
+@pytest.fixture()
+def status_confirmado(db):
+    # status intermediário, não pago — útil para testar que pedidos não entregues ficam fora do fechamento
+    return _get_or_create_status(db, "CONFIRMADO", "Confirmado", 2, False)
+
+
+@pytest.fixture()
+def forma_pagamento_pix(db):
+    return _get_or_create_payment_method(db, "PIX", "Pix")
+
+
+@pytest.fixture()
+def forma_pagamento_debito(db):
+    return _get_or_create_payment_method(db, "CARTAO_DEBITO", "Cartão de Débito")
+
+
+@pytest.fixture()
+def forma_pagamento_credito(db):
+    return _get_or_create_payment_method(db, "CARTAO_CREDITO", "Cartão de Crédito")
+
+
+@pytest.fixture()
+def criar_pedido_direto(db, restaurante, cliente, endereco):
+    """Helper para criar pedidos direto no banco, com controle de status/forma/data/valores."""
+    def _criar(status, forma_pagamento, total_amount, order_datetime, **overrides):
+        dados = dict(
+            restaurant_id=restaurante.id,
+            client_id=cliente.id,
+            status_id=status.id,
+            payment_method_id=forma_pagamento.id,
+            address_name=cliente.name,
+            address_phone=cliente.phone,
+            address_street=endereco.street,
+            address_number=endereco.number,
+            address_neighborhood=endereco.neighborhood,
+            items_amount=total_amount,
+            delivery_fee=Decimal("0"),
+            total_amount=total_amount,
+            order_datetime=order_datetime,
+        )
+        dados.update(overrides)
+        pedido = Order(**dados)
+        db.add(pedido)
+        db.flush()
+        db.refresh(pedido)
+        return pedido
+    return _criar

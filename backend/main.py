@@ -11,6 +11,7 @@ from backend.app.routers import (
     pedido_route,
     relatorio_route,
     teste,
+    fechamento_caixa_route,
 )
 
 app = FastAPI(
@@ -36,6 +37,7 @@ app.include_router(alimento_route.router)
 app.include_router(cardapio_route.router)
 app.include_router(cardapio_do_dia_route.router)
 app.include_router(pedido_route.router)
+app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
 
 @app.get("/health")
