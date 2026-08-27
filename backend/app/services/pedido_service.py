@@ -16,6 +16,8 @@ from backend.app.model.models import (
     Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
 )
 from backend.app.api.depedencias import AuthenticatedClient
+from backend.app.services.auditoria_service import registrar_log_auditoria, ACAO_CRIACAO
+
 
 def criar_pedido(db: Session, payload: OrderCreate, current_client: AuthenticatedClient) -> Order:
     status_inicial = db.query(OrderStatus).order_by(OrderStatus.order.asc()).first()
@@ -31,7 +33,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         raise HTTPException(status_code=404, detail="Endereço não encontrado para este cliente.")
 
     forma_pagamento = db.query(PaymentMethod).filter_by(code=payload.forma_pagamento).first()
-    
+
     if not forma_pagamento:
         raise HTTPException(status_code=422, detail="Forma de pagamento inválida.")
 
@@ -141,6 +143,16 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
                 )
             novo_pedido.change_amount = novo_pedido.cash_paid_amount - novo_pedido.total_amount
 
+        registrar_log_auditoria(
+            db,
+            restaurant_id=novo_pedido.restaurant_id,
+            user_id=None,  # pedido criado pelo cliente final, não por AdminUser
+            entidade="pedido",
+            entidade_id=novo_pedido.id,
+            acao=ACAO_CRIACAO,
+            dados_novos=novo_pedido,
+        )
+
         db.commit()
     except HTTPException:
         db.rollback()
@@ -152,11 +164,13 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     db.refresh(novo_pedido)
     return novo_pedido
 
+
 def buscar_pedido_por_id(db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.UUID) -> Order:
-       pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
-       if not pedido:
-           raise HTTPException(status_code=404, detail="Pedido não encontrado.")
-       return pedido
+    pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+    return pedido
+
 
 def listar_pedidos(
     db: Session,
@@ -164,7 +178,6 @@ def listar_pedidos(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[tuple[Order, str]], int]:
-    """Fila de pedidos do restaurante, do mais antigo para o mais novo (painel)."""
     query = (
         db.query(Order, Client.name)
         .join(Client, Client.id == Order.client_id)
@@ -186,7 +199,6 @@ def listar_pedidos_cliente(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[tuple[Order, str]], int]:
-    """Histórico do cliente — só os pedidos vinculados ao próprio client_id."""
     query = (
         db.query(Order, Client.name)
         .join(Client, Client.id == Order.client_id)
@@ -201,12 +213,13 @@ def listar_pedidos_cliente(
     )
     return resultados, total
 
+
 def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.UUID) -> Order:
-    """Detalhe do pedido para o cliente — só se o pedido for dele mesmo."""
     pedido = db.query(Order).filter_by(id=pedido_id, client_id=client_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido não encontrado.")
     return pedido
+
 
 def atualizar_status_pedido(
     db: Session,
@@ -225,14 +238,12 @@ def atualizar_status_pedido(
 
     status_atual = db.query(OrderStatus).filter_by(id=pedido.status_id).first()
 
-    # RN18 — status final (ENTREGUE/CANCELADO) não pode mais transicionar
     if status_atual and status_atual.is_final:
         raise HTTPException(
             status_code=400,
             detail=f"Pedido está em status final ('{status_atual.code}') e não pode mudar mais.",
         )
 
-    # RN16 — pedido já vinculado a um fechamento de caixa é imutável
     if pedido.cash_closing_id is not None:
         raise HTTPException(
             status_code=400,
@@ -241,7 +252,6 @@ def atualizar_status_pedido(
 
     if status_atual and status_atual.id == novo_status.id:
         raise HTTPException(status_code=400, detail="O pedido já está neste status.")
-
 
     db.add(
         OrderStatusHistory(

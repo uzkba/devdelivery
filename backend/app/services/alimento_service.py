@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
 from backend.app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
 from backend.app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate
+from backend.app.services.auditoria_service import (
+    registrar_log_auditoria, serializar_entidade, ACAO_CRIACAO, ACAO_EDICAO, ACAO_EXCLUSAO,
+)
+
 
 def _get_categoria_ou_404(db: Session, categoria_id: uuid.UUID, restaurant_id: uuid.UUID) -> FoodCategory:
     categoria = db.query(FoodCategory).filter_by(id=categoria_id, restaurant_id=restaurant_id).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="Categoria não encontrada para este restaurante")
     return categoria
+
 
 def get_alimento_por_id(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID) -> Food:
     alimento = (
@@ -20,6 +25,7 @@ def get_alimento_por_id(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid
     if not alimento:
         raise HTTPException(status_code=404, detail="Alimento não encontrado")
     return alimento
+
 
 def listar_alimentos(
     db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.UUID = None, incluir_inativos: bool = False
@@ -35,9 +41,12 @@ def listar_alimentos(
         query = query.filter(Food.category_id == categoria_id)
     return query.all()
 
-def criar_alimento(db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID) -> Food:
+
+def criar_alimento(
+    db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
+) -> Food:
     _get_categoria_ou_404(db, payload.categoria_id, restaurant_id)
-    
+
     novo = Food(
         restaurant_id=restaurant_id,
         category_id=payload.categoria_id,
@@ -68,13 +77,32 @@ def criar_alimento(db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUI
                 )
                 db.add(opcao)
 
+    registrar_log_auditoria(
+        db,
+        restaurant_id=restaurant_id,
+        user_id=usuario_id,
+        entidade="alimento",
+        entidade_id=novo.id,
+        acao=ACAO_CRIACAO,
+        dados_novos=novo,
+    )
+
     db.commit()
     return get_alimento_por_id(db, novo.id, restaurant_id)
 
-def atualizar_alimento(db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate, restaurant_id: uuid.UUID) -> Food:
+
+def atualizar_alimento(
+    db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate,
+    restaurant_id: uuid.UUID, usuario_id: uuid.UUID,
+) -> Food:
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
     dados = payload.model_dump(exclude_unset=True)
-    
+
+    if not dados:
+        return alimento
+
+    dados_anteriores = serializar_entidade(alimento, "alimento")
+
     if "categoria_id" in dados:
         _get_categoria_ou_404(db, dados["categoria_id"], restaurant_id)
         alimento.category_id = dados["categoria_id"]
@@ -84,11 +112,42 @@ def atualizar_alimento(db: Session, alimento_id: uuid.UUID, payload: AlimentoUpd
         alimento.description = dados["descricao"]
     if "preco_base" in dados:
         alimento.base_price = dados["preco_base"]
-        
+
+    registrar_log_auditoria(
+        db,
+        restaurant_id=restaurant_id,
+        user_id=usuario_id,
+        entidade="alimento",
+        entidade_id=alimento.id,
+        acao=ACAO_EDICAO,
+        dados_anteriores=dados_anteriores,
+        dados_novos=alimento,
+    )
+
     db.commit()
     return get_alimento_por_id(db, alimento.id, restaurant_id)
 
-def desativar_alimento(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID):
+
+def desativar_alimento(
+    db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
+):
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
+
+    if not alimento.is_active:
+        raise HTTPException(status_code=400, detail="Alimento já está inativo.")
+
+    dados_anteriores = serializar_entidade(alimento, "alimento")
     alimento.is_active = False
+
+    registrar_log_auditoria(
+        db,
+        restaurant_id=restaurant_id,
+        user_id=usuario_id,
+        entidade="alimento",
+        entidade_id=alimento.id,
+        acao=ACAO_EXCLUSAO,
+        dados_anteriores=dados_anteriores,
+        dados_novos=alimento,
+    )
+
     db.commit()
