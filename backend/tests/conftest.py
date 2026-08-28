@@ -1,11 +1,14 @@
 from pathlib import Path
 
+import uuid
+from decimal import Decimal
+from alembic.util import status
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant
+from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
 import os
 from dotenv import load_dotenv
 
@@ -34,6 +37,7 @@ def token_para_cliente(db):
         return create_access_token(data={"sub": str(cliente.id), "type": "client"})
     return _token_para_cliente
 
+
 @pytest.fixture(scope="session", autouse=True)
 def _aplicar_migrations():
     project_root = Path(__file__).resolve().parents[2]
@@ -44,10 +48,29 @@ def _aplicar_migrations():
 
 @pytest.fixture(scope="function")
 def db():
-    """Cria uma conexão e uma transação isolada para cada teste."""
+    """
+    Cria uma conexão e uma transação isolada para cada teste.
+
+    Usa o padrão de SAVEPOINT (nested transaction) em vez de depender só
+    de connection.begin()/rollback(): os services chamam session.commit()
+    de dentro da aplicação (ex: criar_pedido, criar_alimento), e um commit
+    "normal" numa session vinculada direto à connection encerraria a
+    transação externa de verdade — fazendo o rollback do teardown virar
+    no-op e vazando dados de teste pro banco. O listener abaixo reabre
+    um SAVEPOINT toda vez que o código sob teste comita, então o
+    transaction.rollback() final sempre tem o que desfazer.
+    """
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
+
+    nested = connection.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def _reiniciar_savepoint(session, transaction):
+        nonlocal nested
+        if not nested.is_active:
+            nested = connection.begin_nested()
 
     yield session
 
@@ -111,6 +134,7 @@ def inactive_admin_user(db, restaurante):
     db.refresh(user)
     return user
 
+
 @pytest.fixture()
 def inactive_admin_with_admin_role(db, restaurante):
     user = AdminUser(
@@ -125,6 +149,7 @@ def inactive_admin_with_admin_role(db, restaurante):
     db.flush()
     db.refresh(user)
     return user
+
 
 @pytest.fixture()
 def cliente(db):
@@ -229,6 +254,7 @@ def entregador_user(db, restaurante):
     db.refresh(user)
     return user
 
+
 @pytest.fixture()
 def token_para(db):
     def _token_para(user) -> str:
@@ -243,6 +269,7 @@ def token_para(db):
         )
     return _token_para
 
+
 @pytest.fixture()
 def outro_restaurante(db):
     """Fixture global de um segundo restaurante para testes multi-tenant."""
@@ -251,6 +278,7 @@ def outro_restaurante(db):
     db.flush()
     db.refresh(r)
     return r
+
 
 @pytest.fixture()
 def outro_admin_user(db, outro_restaurante):
@@ -268,28 +296,37 @@ def outro_admin_user(db, outro_restaurante):
     db.refresh(user)
     return user
 
-@pytest.fixture()
-def status_criado(db):
-    """Garante que existe o status inicial do pedido."""
-    status = OrderStatus(code="CRIADO", name="Criado", order=1, is_final=False)
-    db.add(status)
-    db.flush()
-    db.refresh(status)
+
+def _get_or_create_status(db, code, name, order, is_final):
+    status = db.query(OrderStatus).filter_by(code=code).first()
+    if status is None:
+        status = OrderStatus(code=code, name=name, order=order, is_final=is_final)
+        db.add(status)
+        db.flush()
+        db.refresh(status)
     return status
 
 
 @pytest.fixture()
+def status_criado(db):
+    """Garante que existe o status inicial do pedido."""
+    return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
+
+
+@pytest.fixture()
 def forma_pagamento_dinheiro(db):
-    fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
-    db.add(fp)
-    db.flush()
-    db.refresh(fp)
+    fp = db.query(PaymentMethod).filter_by(code="DINHEIRO").first()
+    if fp is None:
+        fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
+        db.add(fp)
+        db.flush()
+        db.refresh(fp)
     return fp
+
 
 @pytest.fixture()
 def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, status_criado):
     """Pedido básico no status inicial, pronto pra testar transições de status."""
-
     pedido = Order(
         restaurant_id=restaurante.id,
         client_id=cliente.id,
@@ -308,3 +345,122 @@ def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, s
     db.flush()
     db.refresh(pedido)
     return pedido
+
+
+@pytest.fixture()
+def log_do_outro_restaurante(db, outro_restaurante):
+    log = AuditLog(
+        restaurant_id=outro_restaurante.id,
+        user_id=None,
+        entity="alimento",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"nome": "Prato de outro restaurante"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
+
+
+@pytest.fixture()
+def algum_log_de_pedido(db, restaurante):
+    log = AuditLog(
+        restaurant_id=restaurante.id,
+        user_id=None,
+        entity="pedido",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"total_amount": "25.90"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
+
+
+@pytest.fixture()
+def algum_log_de_alimento(db, restaurante, admin_user):
+    log = AuditLog(
+        restaurant_id=restaurante.id,
+        user_id=admin_user.id,
+        entity="alimento",
+        entity_id=str(uuid.uuid4()),
+        action="CRIACAO",
+        previous_data=None,
+        new_data={"nome": "Feijoada"},
+    )
+    db.add(log)
+    db.flush()
+    db.refresh(log)
+    return log
+
+def _get_or_create_payment_method(db, code, name):
+    fp = db.query(PaymentMethod).filter_by(code=code).first()
+    if fp is None:
+        fp = PaymentMethod(code=code, name=name, is_active=True)
+        db.add(fp)
+        db.flush()
+        db.refresh(fp)
+    return fp
+
+@pytest.fixture()
+def status_entregue(db):
+    # já vem seedado pela migration com pago=True — is_final=True
+    return _get_or_create_status(db, "ENTREGUE", "Entregue", 5, True)
+
+
+@pytest.fixture()
+def status_cancelado(db):
+    return _get_or_create_status(db, "CANCELADO", "Cancelado", 6, True)
+
+
+@pytest.fixture()
+def status_confirmado(db):
+    # status intermediário, não pago — útil para testar que pedidos não entregues ficam fora do fechamento
+    return _get_or_create_status(db, "CONFIRMADO", "Confirmado", 2, False)
+
+
+@pytest.fixture()
+def forma_pagamento_pix(db):
+    return _get_or_create_payment_method(db, "PIX", "Pix")
+
+
+@pytest.fixture()
+def forma_pagamento_debito(db):
+    return _get_or_create_payment_method(db, "CARTAO_DEBITO", "Cartão de Débito")
+
+
+@pytest.fixture()
+def forma_pagamento_credito(db):
+    return _get_or_create_payment_method(db, "CARTAO_CREDITO", "Cartão de Crédito")
+
+
+@pytest.fixture()
+def criar_pedido_direto(db, restaurante, cliente, endereco):
+    """Helper para criar pedidos direto no banco, com controle de status/forma/data/valores."""
+    def _criar(status, forma_pagamento, total_amount, order_datetime, **overrides):
+        dados = dict(
+            restaurant_id=restaurante.id,
+            client_id=cliente.id,
+            status_id=status.id,
+            payment_method_id=forma_pagamento.id,
+            address_name=cliente.name,
+            address_phone=cliente.phone,
+            address_street=endereco.street,
+            address_number=endereco.number,
+            address_neighborhood=endereco.neighborhood,
+            items_amount=total_amount,
+            delivery_fee=Decimal("0"),
+            total_amount=total_amount,
+            order_datetime=order_datetime,
+        )
+        dados.update(overrides)
+        pedido = Order(**dados)
+        db.add(pedido)
+        db.flush()
+        db.refresh(pedido)
+        return pedido
+    return _criar
