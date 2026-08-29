@@ -1,16 +1,25 @@
+import os
 from pathlib import Path
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv())
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 import uuid
 from decimal import Decimal
-from alembic.util import status
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.util import status
+
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
-import os
-from dotenv import load_dotenv
+
 
 from fastapi.testclient import TestClient
 
@@ -19,12 +28,6 @@ from backend.app.core.seguranca import hash_password, create_access_token as cre
 from backend.main import app
 from backend.app.model.models import Client, CustomerAddress
 from backend.app.routers.autenticacao_route import create_access_token
-
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 engine = create_engine(DATABASE_URL)

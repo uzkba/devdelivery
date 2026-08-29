@@ -47,7 +47,7 @@ def outro_admin_user(db, outro_restaurante):
 
 
 def _headers(client, login: str, password: str = "senha123") -> dict:
-    response = client.post("/auth/login", json={"login": login, "password": password})
+    response = client.post("/auth/login/admin", json={"login": login, "password": password})
     assert response.status_code == 200, f"login falhou para {login}: {response.text}"
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

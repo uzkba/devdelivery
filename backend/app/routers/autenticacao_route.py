@@ -18,7 +18,7 @@ from backend.app.api.depedencias import get_current_user
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login/admin", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(AdminUser).where(AdminUser.login == payload.login))
     credenciais_invalidas = HTTPException(
@@ -59,7 +59,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
     return current_user
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login/cliente", response_model=TokenResponse)
 def login_cliente(payload: ClienteLoginIn, db: Session = Depends(get_db)) -> TokenResponse:
     cliente = db.scalar(select(Client).where(Client.phone == payload.phone))
     if cliente is None or not verify_password(payload.password, cliente.hashed_password):

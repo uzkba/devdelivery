@@ -13,6 +13,7 @@ from backend.app.routers import (
     teste,
     fechamento_caixa_route,
     relatorio_route,
+    admin_cardapio_route,
 )
 
 app = FastAPI(
@@ -23,7 +24,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173/"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=[""],  
     allow_headers=[""], 
@@ -41,6 +42,7 @@ app.include_router(pedido_route.router)
 app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
 app.include_router(auditoria_route.router)
+app.include_router(admin_cardapio_route.router)
 
 @app.get("/health")
 def health_check():

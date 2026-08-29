@@ -61,7 +61,7 @@ class TestJWT:
 class TestLogin:
     def test_login_com_credenciais_corretas_retorna_token(self, client, admin_user):
         response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "maria.admin", "password": "senha123"},
         )
         assert response.status_code == 200
@@ -71,7 +71,7 @@ class TestLogin:
 
     def test_token_retornado_contem_claims_corretos(self, client, admin_user):
         response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "maria.admin", "password": "senha123"},
         )
         token = response.json()["access_token"]
@@ -83,34 +83,34 @@ class TestLogin:
 
     def test_login_com_senha_errada_retorna_401(self, client, admin_user):
         response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "maria.admin", "password": "senhaErrada"},
         )
         assert response.status_code == 401
 
     def test_login_com_usuario_inexistente_retorna_401(self, client):
         response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "nao.existe", "password": "qualquer"},
         )
         assert response.status_code == 401
 
     def test_login_de_usuario_inativo_retorna_403(self, client, inactive_admin_user):
         response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "joao.inativo", "password": "senha123"},
         )
         assert response.status_code == 403
 
     def test_login_sem_campo_password_retorna_422(self, client):
-        response = client.post("/auth/login", json={"login": "maria.admin"})
+        response = client.post("/auth/login/admin", json={"login": "maria.admin"})
         assert response.status_code == 422
 
 
 class TestMe:
     def test_me_com_token_valido_retorna_dados_do_usuario(self, client, admin_user):
         login_response = client.post(
-            "/auth/login",
+            "/auth/login/admin",
             json={"login": "maria.admin", "password": "senha123"},
         )
         token = login_response.json()["access_token"]

@@ -2,7 +2,7 @@ import uuid
 
 
 def _login(client, login, password="senha123"):
-    response = client.post("/auth/login", json={"login": login, "password": password})
+    response = client.post("/auth/login/admin", json={"login": login, "password": password})
     return response.json()["access_token"]
 
 
