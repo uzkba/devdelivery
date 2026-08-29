@@ -250,7 +250,7 @@ def test_login_cliente_sucesso(db, client):
     db.flush()
     db.refresh(cli)
 
-    resp = client.post("/clientes/login", json={"phone": cli.phone, "password": "senha1234"})
+    resp = client.post("/clientes/login/cliente", json={"phone": cli.phone, "password": "senha1234"})
     assert resp.status_code == 200
     assert "access_token" in resp.json()
 
@@ -261,5 +261,5 @@ def test_login_cliente_senha_errada_retorna_401(db, client):
     db.flush()
     db.refresh(cli)
 
-    resp = client.post("/clientes/login", json={"phone": cli.phone, "password": "senha_errada"})
+    resp = client.post("/clientes/login/cliente", json={"phone": cli.phone, "password": "senha_errada"})
     assert resp.status_code == 401

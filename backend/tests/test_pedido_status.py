@@ -5,7 +5,7 @@ from backend.tests.conftest import _get_or_create_status
 
 
 def _headers(client, login: str, password: str = "senha123") -> dict:
-    response = client.post("/auth/login", json={"login": login, "password": password})
+    response = client.post("/auth/login/admin", json={"login": login, "password": password})
     assert response.status_code == 200, f"Login falhou: {response.text}"
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
