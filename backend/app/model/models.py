@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Column,
     Date,
     DateTime,
     ForeignKey,
@@ -32,6 +33,8 @@ class Restaurant(Base):
     phone: Mapped[str | None] = mapped_column("telefone", String(20))
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
 
 
 class Client(Base):
@@ -56,6 +59,8 @@ class CustomerAddress(Base):
     reference_point: Mapped[str | None] = mapped_column("ponto_de_referencia", String(150))
     primary_address: Mapped[bool] = mapped_column("endereco_principal", Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="addresses")
 
@@ -361,3 +366,12 @@ class AuditLog(Base):
         Index("idx_log_auditoria_entidade", "entidade", "entidade_id"),
         Index("idx_log_auditoria_restaurante_periodo", "restaurante_id", "criado_em"),
     )
+
+class DeliveryRule(Base):
+    __tablename__ = "delivery_rules"
+    id = Column(uuid.UUID, primary_key=True, default=uuid.uuid4)
+    restaurant_id = Column(uuid.UUID, ForeignKey("restaurants.id"), nullable=False)
+    min_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 0.00
+    max_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 3.00
+    fee = Column(Numeric(10, 2), nullable=False)            # Ex: 5.00
+    is_active = Column(Boolean, default=True)

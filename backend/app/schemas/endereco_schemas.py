@@ -11,6 +11,8 @@ class EnderecoCreate(BaseModel):
     complement: str | None = None
     reference_point: str | None = None
     primary_address: bool = False
+    latitude: float = Field(..., description="Latitude geolocalizada do cliente")
+    longitude: float = Field(..., description="Longitude geolocalizada do cliente")
 
 
 class EnderecoOut(EnderecoCreate):

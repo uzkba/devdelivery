@@ -5,10 +5,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.model.models import (
-    Order, OrderItem, OrderItemOption,
+    DeliveryRule, Order, OrderItem, OrderItemOption,
     Food, MenuItem, Menu, ModifierOption,
     CustomerAddress, OrderStatus,
     PaymentMethod,
+    Restaurant,
 )
 from backend.app.schemas.pedido_schemas import OrderCreate
 from backend.app.model.models import (
@@ -17,6 +18,7 @@ from backend.app.model.models import (
 )
 from backend.app.api.depedencias import AuthenticatedClient
 from backend.app.services.auditoria_service import registrar_log_auditoria, ACAO_CRIACAO
+from backend.app.utils.geo import calcular_distancia_km
 
 
 def criar_pedido(db: Session, payload: OrderCreate, current_client: AuthenticatedClient) -> Order:
@@ -33,7 +35,6 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         raise HTTPException(status_code=404, detail="Endereço não encontrado para este cliente.")
 
     forma_pagamento = db.query(PaymentMethod).filter_by(code=payload.forma_pagamento).first()
-
     if not forma_pagamento:
         raise HTTPException(status_code=422, detail="Forma de pagamento inválida.")
 
@@ -44,7 +45,52 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
             status_code=422, detail="valor_pago_dinheiro só é válido para pagamento em DINHEIRO."
         )
 
+    restaurante = db.query(Restaurant).filter_by(id=payload.restaurante_id).first()
+    
+    if not restaurante.latitude or not restaurante.longitude:
+        raise HTTPException(
+            status_code=500, detail="Restaurante não possui coordenadas configuradas."
+        )
+    if not endereco.latitude or not endereco.longitude:
+        raise HTTPException(
+            status_code=400, detail="Endereço de entrega não possui coordenadas válidas."
+        )
+
+    # 1. Calcular a distância em km
+    distancia_km = calcular_distancia_km(
+        float(restaurante.latitude), float(restaurante.longitude),
+        float(endereco.latitude), float(endereco.longitude)
+    )
+
+    # 2. Buscar a regra de taxa de entrega aplicável
+    regra_entrega = (
+        db.query(DeliveryRule)
+        .filter(
+            DeliveryRule.restaurant_id == restaurante.id,
+            DeliveryRule.is_active.is_(True),
+            DeliveryRule.min_distance_km <= distancia_km,
+            DeliveryRule.max_distance_km >= distancia_km
+        )
+        .first()
+    )
+
+    if not regra_entrega:
+        raise HTTPException(
+            status_code=422, 
+            detail=f"O endereço selecionado está fora da área de entrega (Distância: {distancia_km:.1f}km)."
+        )
+
+    delivery_fee = Decimal(str(regra_entrega.fee))
+
+    # 1. Extração em lote de IDs (Alimentos e Opções)
     alimento_ids = [item.alimento_id for item in payload.itens]
+    todas_opcoes_ids = [
+        opcao.opcao_complemento_id 
+        for item in payload.itens 
+        for opcao in item.opcoes_selecionadas
+    ]
+
+    # 2. Consultas únicas otimizadas no banco
     itens_cardapio_hoje = (
         db.query(MenuItem)
         .join(Menu, MenuItem.menu_id == Menu.id)
@@ -66,8 +112,16 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         )
 
     alimentos_por_id = {f.id: f for f in db.query(Food).filter(Food.id.in_(alimento_ids)).all()}
-    delivery_fee = Decimal("0.00")  # TODO: regra real de taxa de entrega ainda não definida
+    
+    # Dicionário em memória para as opções
+    dict_opcoes = {}
+    if todas_opcoes_ids:
+        opcoes_db = db.query(ModifierOption).filter(ModifierOption.id.in_(todas_opcoes_ids)).all()
+        dict_opcoes = {opcao.id: opcao for opcao in opcoes_db}
 
+    delivery_fee = Decimal("0.00")  # TODO: regra real de taxa de entrega
+
+    # 3. Montagem do pedido
     novo_pedido = Order(
         restaurant_id=payload.restaurante_id,
         client_id=current_client.id,
@@ -92,6 +146,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
 
         valor_total_itens = Decimal("0.00")
 
+        # 4. Processamento iterativo estritamente em memória
         for item_data in payload.itens:
             menu_item = cardapio_por_alimento[item_data.alimento_id]
             alimento = alimentos_por_id[item_data.alimento_id]
@@ -114,12 +169,15 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
             subtotal_item = preco_unitario
 
             for opcao_data in item_data.opcoes_selecionadas:
-                opcao_db = db.query(ModifierOption).filter_by(id=opcao_data.opcao_complemento_id).first()
+                # Busca direto no dicionário carregado no passo 2
+                opcao_db = dict_opcoes.get(opcao_data.opcao_complemento_id)
+                
                 if not opcao_db or not opcao_db.is_available:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Opção {opcao_data.opcao_complemento_id} indisponível.",
                     )
+                
                 nova_opcao = OrderItemOption(
                     order_item_id=novo_item.id,
                     modifier_option_id=opcao_db.id,
@@ -146,7 +204,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         registrar_log_auditoria(
             db,
             restaurant_id=novo_pedido.restaurant_id,
-            user_id=None,  # pedido criado pelo cliente final, não por AdminUser
+            user_id=None,
             entidade="pedido",
             entidade_id=novo_pedido.id,
             acao=ACAO_CRIACAO,
