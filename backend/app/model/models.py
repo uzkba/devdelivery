@@ -24,10 +24,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.core.database import Base
+from sqlalchemy.dialects.postgresql import UUID
 
 class Restaurant(Base):
     __tablename__ = "restaurante"
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     trade_name: Mapped[str] = mapped_column("nome_fantasia", String(150), nullable=False)
     cnpj: Mapped[str | None] = mapped_column("cnpj", String(18), unique=True)
     phone: Mapped[str | None] = mapped_column("telefone", String(20))
@@ -39,7 +40,7 @@ class Restaurant(Base):
 
 class Client(Base):
     __tablename__ = "cliente"
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column("nome", String(150), nullable=False)
     phone: Mapped[str] = mapped_column("telefone", String(20), nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
@@ -50,7 +51,7 @@ class Client(Base):
 
 class CustomerAddress(Base):
     __tablename__ = "endereco_cliente"
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column("cliente_id", ForeignKey("cliente.id", ondelete="CASCADE"), nullable=False)
     complement: Mapped[str | None] = mapped_column("complemento", String(50))
     street: Mapped[str] = mapped_column("rua", String(150), nullable=False)
@@ -77,7 +78,7 @@ class CustomerAddress(Base):
 class PaymentMethod(Base):
     __tablename__ = "forma_pagamento"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     code: Mapped[str] = mapped_column("codigo", String(20), unique=True, nullable=False)
     name: Mapped[str] = mapped_column("nome", String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
@@ -86,7 +87,7 @@ class PaymentMethod(Base):
 class OrderStatus(Base):
     __tablename__ = "status_pedido"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     code: Mapped[str] = mapped_column("codigo", String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column("nome", String(50), nullable=False)
     order: Mapped[int] = mapped_column("ordem", Integer, nullable=False)
@@ -97,7 +98,7 @@ class OrderStatus(Base):
 class AdminUser(Base):
     __tablename__ = "usuario_admin"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     name: Mapped[str] = mapped_column("nome", String(150), nullable=False)
     login: Mapped[str] = mapped_column("login", String(60), unique=True, nullable=False)
@@ -117,7 +118,7 @@ class AdminUser(Base):
 class FoodCategory(Base):
     __tablename__ = "categoria_alimento"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
     display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0, nullable=False)
@@ -133,7 +134,7 @@ class FoodCategory(Base):
 class Food(Base):
     __tablename__ = "alimento"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     category_id: Mapped[uuid.UUID] = mapped_column("categoria_id", ForeignKey("categoria_alimento.id"), nullable=False)
     name: Mapped[str] = mapped_column("nome", String(120), nullable=False)
@@ -155,7 +156,7 @@ class Food(Base):
 class ModifierGroup(Base):
     __tablename__ = "grupo_complemento"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
     min_choices: Mapped[int] = mapped_column("escolhas_minimas", Integer, default=0, nullable=False)
@@ -174,7 +175,7 @@ class ModifierGroup(Base):
 class ModifierOption(Base):
     __tablename__ = "opcao_complemento"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     group_id: Mapped[uuid.UUID] = mapped_column("grupo_id", ForeignKey("grupo_complemento.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column("nome", String(60), nullable=False) 
     extra_price: Mapped[Decimal] = mapped_column("preco_adicional", Numeric(10, 2), default=0, nullable=False)
@@ -185,7 +186,7 @@ class ModifierOption(Base):
 class Menu(Base):
     __tablename__ = "cardapio"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     date: Mapped[date] = mapped_column("data", Date, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column("criado_por", ForeignKey("usuario_admin.id"))
@@ -198,7 +199,7 @@ class Menu(Base):
 class MenuItem(Base):
     __tablename__ = "cardapio_item"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     menu_id: Mapped[uuid.UUID] = mapped_column("cardapio_id", ForeignKey("cardapio.id", ondelete="CASCADE"), nullable=False)
     food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id"), nullable=False)
     
@@ -217,7 +218,7 @@ class MenuItem(Base):
 class CashClosing(Base):
     __tablename__ = "fechamento_caixa"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     start_date: Mapped[date] = mapped_column("data_inicio", Date, nullable=False)
     end_date: Mapped[date] = mapped_column("data_fim", Date, nullable=False)
@@ -246,7 +247,7 @@ class CashClosing(Base):
 class Order(Base):
     __tablename__ = "pedido"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     order_number: Mapped[int] = mapped_column("numero_pedido", Integer, Identity(), unique=True, nullable=False)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     client_id: Mapped[uuid.UUID] = mapped_column("cliente_id", ForeignKey("cliente.id"), nullable=False)
@@ -291,7 +292,7 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "pedido_item"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column("pedido_id", ForeignKey("pedido.id", ondelete="CASCADE"), nullable=False)
     
     food_id: Mapped[uuid.UUID | None] = mapped_column("alimento_id", ForeignKey("alimento.id", ondelete="SET NULL"), nullable=True)
@@ -317,7 +318,7 @@ class OrderItem(Base):
 class OrderItemOption(Base):
     __tablename__ = "pedido_item_opcao"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     order_item_id: Mapped[uuid.UUID] = mapped_column("pedido_item_id", ForeignKey("pedido_item.id", ondelete="CASCADE"), nullable=False)
     modifier_option_id: Mapped[uuid.UUID | None] = mapped_column("opcao_complemento_id", ForeignKey("opcao_complemento.id", ondelete="SET NULL"), nullable=True)
 
@@ -336,7 +337,7 @@ class OrderItemOption(Base):
 class OrderStatusHistory(Base):
     __tablename__ = "historico_status_pedido"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column("pedido_id", ForeignKey("pedido.id", ondelete="CASCADE"), nullable=False)
     previous_status_id: Mapped[uuid.UUID | None] = mapped_column("status_anterior_id", ForeignKey("status_pedido.id"))
     new_status_id: Mapped[uuid.UUID] = mapped_column("status_novo_id", ForeignKey("status_pedido.id"), nullable=False)
@@ -352,7 +353,7 @@ class OrderStatusHistory(Base):
 class AuditLog(Base):
     __tablename__ = "log_auditoria"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     user_id: Mapped[uuid.UUID | None] = mapped_column("usuario_id", ForeignKey("usuario_admin.id"))
     entity: Mapped[str] = mapped_column("entidade", String(50), nullable=False)
@@ -369,8 +370,8 @@ class AuditLog(Base):
 
 class DeliveryRule(Base):
     __tablename__ = "delivery_rules"
-    id = Column(uuid.UUID, primary_key=True, default=uuid.uuid4)
-    restaurant_id = Column(uuid.UUID, ForeignKey("restaurants.id"), nullable=False)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    restaurant_id = Column(UUID, ForeignKey("restaurante.id"), nullable=False)
     min_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 0.00
     max_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 3.00
     fee = Column(Numeric(10, 2), nullable=False)            # Ex: 5.00
