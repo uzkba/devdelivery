@@ -4,19 +4,19 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.app.model.models import (
+from app.model.models import (
     Order, OrderItem, OrderItemOption,
     Food, MenuItem, Menu, ModifierOption,
     CustomerAddress, OrderStatus,
     PaymentMethod,
 )
-from backend.app.schemas.pedido_schemas import OrderCreate
-from backend.app.model.models import (
+from app.schemas.pedido_schemas import OrderCreate
+from app.model.models import (
     Order, OrderItem, OrderItemOption,
     Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
 )
-from backend.app.api.depedencias import AuthenticatedClient
-from backend.app.services.auditoria_service import registrar_log_auditoria, ACAO_CRIACAO
+from app.api.depedencias import AuthenticatedClient
+from app.services.auditoria_service import registrar_log_auditoria, ACAO_CRIACAO
 
 
 def criar_pedido(db: Session, payload: OrderCreate, current_client: AuthenticatedClient) -> Order:

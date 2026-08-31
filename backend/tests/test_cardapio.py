@@ -15,8 +15,8 @@ from decimal import Decimal
 
 import pytest
 
-from backend.app.core.seguranca import create_access_token, hash_password
-from backend.app.model.models import AdminUser, AuditLog, Food, FoodCategory, Menu, MenuItem, Restaurant
+from app.core.seguranca import create_access_token, hash_password
+from app.model.models import AdminUser, AuditLog, Food, FoodCategory, Menu, MenuItem, Restaurant
 
 RESTAURANTE_ID_PADRAO = uuid.UUID("00000000-0000-0000-0000-000000000000")
 

@@ -3,10 +3,10 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import get_current_user
-from backend.app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate, AlimentoOut
-from backend.app.services import alimento_service
+from app.core.database import get_db
+from app.api.depedencias import get_current_user
+from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate, AlimentoOut
+from app.services import alimento_service
 
 router = APIRouter(prefix="/alimentos", tags=["Alimentos"])
 

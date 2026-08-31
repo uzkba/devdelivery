@@ -14,8 +14,8 @@ import uuid
 
 import pytest
 
-from backend.app.core.seguranca import hash_password
-from backend.app.model.models import AdminUser, Restaurant
+from app.core.seguranca import hash_password
+from app.model.models import AdminUser, Restaurant
 
 
 # ---------------------------------------------------------------------------

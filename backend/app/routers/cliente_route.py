@@ -11,15 +11,15 @@ from backend.app.core.seguranca import (
     create_access_token as create_access_token_cliente,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from backend.app.schemas.autenticacao_schemas import AuthenticatedUser, TokenResponse
-from backend.app.schemas.cliente_schemas import (
+from app.schemas.autenticacao_schemas import AuthenticatedUser, TokenResponse
+from app.schemas.cliente_schemas import (
     ClienteCreate,
     ClienteOut,
     ClienteRegistrarIn,
     ClienteLoginIn,
 )
-from backend.app.model.models import Client
-from backend.app.services import cliente_service
+from app.model.models import Client
+from app.services import cliente_service
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
