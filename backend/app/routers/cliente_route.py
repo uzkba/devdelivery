@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import require_role
-from backend.app.core.seguranca import (
+from app.core.database import get_db
+from app.api.depedencias import require_role
+from app.core.seguranca import (
     hash_password,
     verify_password,
     create_access_token as create_access_token_cliente,
