@@ -46,7 +46,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         )
 
     restaurante = db.query(Restaurant).filter_by(id=payload.restaurante_id).first()
-    
+
     if not restaurante.latitude or not restaurante.longitude:
         raise HTTPException(
             status_code=500, detail="Restaurante não possui coordenadas configuradas."
@@ -76,7 +76,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
 
     if not regra_entrega:
         raise HTTPException(
-            status_code=422, 
+            status_code=422,
             detail=f"O endereço selecionado está fora da área de entrega (Distância: {distancia_km:.1f}km)."
         )
 
@@ -85,8 +85,8 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     # 1. Extração em lote de IDs (Alimentos e Opções)
     alimento_ids = [item.alimento_id for item in payload.itens]
     todas_opcoes_ids = [
-        opcao.opcao_complemento_id 
-        for item in payload.itens 
+        opcao.opcao_complemento_id
+        for item in payload.itens
         for opcao in item.opcoes_selecionadas
     ]
 
@@ -112,14 +112,12 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         )
 
     alimentos_por_id = {f.id: f for f in db.query(Food).filter(Food.id.in_(alimento_ids)).all()}
-    
+
     # Dicionário em memória para as opções
     dict_opcoes = {}
     if todas_opcoes_ids:
         opcoes_db = db.query(ModifierOption).filter(ModifierOption.id.in_(todas_opcoes_ids)).all()
         dict_opcoes = {opcao.id: opcao for opcao in opcoes_db}
-
-    delivery_fee = Decimal("0.00")  # TODO: regra real de taxa de entrega
 
     # 3. Montagem do pedido
     novo_pedido = Order(
@@ -166,18 +164,21 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
             db.add(novo_item)
             db.flush()
 
-            subtotal_item = preco_unitario
+            # Preço base já multiplicado pela quantidade do item.
+            # Os adicionais são somados à parte, sem multiplicar de novo
+            # pela quantidade do item (evita dobrar o valor dos adicionais).
+            subtotal_item = preco_unitario * item_data.quantidade
 
             for opcao_data in item_data.opcoes_selecionadas:
                 # Busca direto no dicionário carregado no passo 2
                 opcao_db = dict_opcoes.get(opcao_data.opcao_complemento_id)
-                
+
                 if not opcao_db or not opcao_db.is_available:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Opção {opcao_data.opcao_complemento_id} indisponível.",
                     )
-                
+
                 nova_opcao = OrderItemOption(
                     order_item_id=novo_item.id,
                     modifier_option_id=opcao_db.id,
@@ -188,7 +189,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
                 db.add(nova_opcao)
                 subtotal_item += opcao_db.extra_price * opcao_data.quantidade
 
-            novo_item.subtotal = subtotal_item * item_data.quantidade
+            novo_item.subtotal = subtotal_item
             valor_total_itens += novo_item.subtotal
 
         novo_pedido.items_amount = valor_total_itens
