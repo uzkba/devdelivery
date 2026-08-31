@@ -1,4 +1,4 @@
-from backend.app.core.seguranca import create_access_token
+from app.core.seguranca import create_access_token
 
 
 def _gerar_token(user):

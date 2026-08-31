@@ -2,8 +2,8 @@ import pytest
 from datetime import date
 from decimal import Decimal
 
-from backend.app.model.models import Food, FoodCategory, Menu, MenuItem, Client
-from backend.app.core.seguranca import hash_password
+from app.model.models import Food, FoodCategory, Menu, MenuItem, Client
+from app.core.seguranca import hash_password
 
 
 # ── fixtures/helpers locais, mesmo padrão de test_cardapio_do_dia.py ──
@@ -127,7 +127,7 @@ def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente,
 
 def test_pedido_rejeita_endereco_de_outro_cliente(db, client, restaurante, cliente, outro_cliente, categoria, token_para_cliente):
     # endereço pertence a outro_cliente, mas quem autentica é cliente — não pode usar
-    from backend.app.model.models import CustomerAddress
+    from app.model.models import CustomerAddress
     endereco_alheio = CustomerAddress(
         client_id=outro_cliente.id, street="Rua de Outro", number="1", neighborhood="Bairro"
     )

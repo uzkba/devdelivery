@@ -18,16 +18,16 @@ from alembic.util import status
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from backend.app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
+from app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
 
 
 from fastapi.testclient import TestClient
 
-from backend.app.core.database import get_db
-from backend.app.core.seguranca import hash_password, create_access_token as create_access_token_cliente
-from backend.main import app
-from backend.app.model.models import Client, CustomerAddress
-from backend.app.routers.autenticacao_route import create_access_token
+from app.core.database import get_db
+from app.core.seguranca import hash_password, create_access_token as create_access_token_cliente
+from main import app
+from app.model.models import Client, CustomerAddress
+from app.routers.autenticacao_route import create_access_token
 
 
 engine = create_engine(DATABASE_URL)
