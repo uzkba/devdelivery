@@ -1,63 +1,63 @@
 import {
-    BarChart3,
-    BookOpen,
-    ClipboardList,
-    LayoutDashboard,
-    Wallet,
+  BarChart3,
+  BookOpen,
+  ClipboardList,
+  LayoutDashboard,
+  Wallet,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { UserRole } from "../../auth/AuthContext";
+import type { UserRole } from "../../auth/StaffAuthContext";
 
 export interface AdminNavItem {
-    label: string;
-    /** Rótulo curto para a barra inferior (telas estreitas). Cai para `label` se ausente. */
-    shortLabel?: string;
-    path: string;
-    icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
-    roles: UserRole[];
+  label: string;
+  /** Rótulo curto para a barra inferior (telas estreitas). Cai para `label` se ausente. */
+  shortLabel?: string;
+  path: string;
+  icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
+  roles: UserRole[];
 }
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
-    {
-        label: "Visão geral",
-        shortLabel: "Início",
-        path: "/admin",
-        icon: LayoutDashboard,
-        roles: ["admin", "atendente", "caixa", "entregador"],
-    },
-    {
-        label: "Cardápio",
-        path: "/admin/cardapio",
-        icon: BookOpen,
-        roles: ["admin", "atendente"],
-    },
-    {
-        label: "Pedidos",
-        path: "/admin/pedidos",
-        icon: ClipboardList,
-        roles: ["admin", "atendente", "caixa", "entregador"],
-    },
-    {
-        label: "Relatórios",
-        path: "/admin/relatorios",
-        icon: BarChart3,
-        roles: ["admin"],
-    },
-    {
-        label: "Fechamento de caixa",
-        shortLabel: "Caixa",
-        path: "/admin/fechamento-caixa",
-        icon: Wallet,
-        roles: ["admin", "caixa"],
-    },
+  {
+    label: "Visão geral",
+    shortLabel: "Início",
+    path: "/admin",
+    icon: LayoutDashboard,
+    roles: ["admin", "atendente", "caixa", "entregador"],
+  },
+  {
+    label: "Cardápio",
+    path: "/admin/cardapio",
+    icon: BookOpen,
+    roles: ["admin", "atendente"],
+  },
+  {
+    label: "Pedidos",
+    path: "/admin/pedidos",
+    icon: ClipboardList,
+    roles: ["admin", "atendente", "caixa", "entregador"],
+  },
+  {
+    label: "Relatórios",
+    path: "/admin/relatorios",
+    icon: BarChart3,
+    roles: ["admin"],
+  },
+  {
+    label: "Fechamento de caixa",
+    shortLabel: "Caixa",
+    path: "/admin/fechamento-caixa",
+    icon: Wallet,
+    roles: ["admin", "caixa"],
+  },
 ];
 
 export function isNavItemActive(path: string, currentPath: string): boolean {
-    if (path === "/admin") {
-        return currentPath === "/admin";
-    }
-    return currentPath.startsWith(path);
+  if (path === "/admin") {
+    return currentPath === "/admin";
+  }
+  return currentPath.startsWith(path);
 }
 
 /**
@@ -67,13 +67,13 @@ export function isNavItemActive(path: string, currentPath: string): boolean {
  * de registrá-la aqui, o app quebra no boot, não em produção.
  */
 export function getRolesForPath(path: string): UserRole[] {
-    const item = ADMIN_NAV_ITEMS.find((entry) => entry.path === path);
+  const item = ADMIN_NAV_ITEMS.find((entry) => entry.path === path);
 
-    if (!item) {
-        throw new Error(
-            `Nenhum item de navegação admin encontrado para "${path}". Registre-o em ADMIN_NAV_ITEMS antes de usar RequireRole.`,
-        );
-    }
+  if (!item) {
+    throw new Error(
+      `Nenhum item de navegação admin encontrado para "${path}". Registre-o em ADMIN_NAV_ITEMS antes de usar RequireRole.`,
+    );
+  }
 
-    return item.roles;
+  return item.roles;
 }
