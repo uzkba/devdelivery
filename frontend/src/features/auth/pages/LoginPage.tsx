@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../../shared/auth/AuthContext";
+import { useAuth } from "../../../shared/auth/StaffAuthContext";
 
 export function LoginPage() {
   const { login } = useAuth();

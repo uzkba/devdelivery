@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 
-import { useAuth, type UserRole } from "../../auth/AuthContext";
+import { useAuth, type UserRole } from "../../auth/StaffAuthContext";
 
 interface RequireRoleProps {
-    roles: UserRole[];
-    children: ReactNode;
+  roles: UserRole[];
+  children: ReactNode;
 }
 
 /**
@@ -13,15 +13,15 @@ interface RequireRoleProps {
  * Sem isso, um usuário sem permissão ainda acessava a página digitando a URL.
  */
 export function RequireRole({ roles, children }: RequireRoleProps) {
-    const { user } = useAuth();
+  const { user } = useAuth();
 
-    if (!user) {
-        return <Navigate to="/login" replace />;
-    }
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-    if (!roles.includes(user.role)) {
-        return <Navigate to="/admin" replace />;
-    }
+  if (!roles.includes(user.role)) {
+    return <Navigate to="/admin" replace />;
+  }
 
-    return <>{children}</>;
+  return <>{children}</>;
 }
