@@ -3,10 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.api.depedencias import require_role
-from app.model.models import AuditLog
-from app.schemas.auditoria_schemas import AuditLogOut
+from backend.app.core.database import get_db
+from backend.app.api.depedencias import require_role
+from backend.app.model.models import AuditLog
+from backend.app.schemas.auditoria_schemas import AuditLogOut
 
 router = APIRouter(prefix="/logs-auditoria", tags=["auditoria"])
 

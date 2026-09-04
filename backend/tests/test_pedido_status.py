@@ -1,7 +1,7 @@
 import uuid
-from app.model.models import OrderStatus, OrderStatusHistory
+from backend.app.model.models import OrderStatus, OrderStatusHistory
 import pytest
-from tests.conftest import _get_or_create_status
+from backend.tests.conftest import _get_or_create_status
 
 
 def _headers(client, login: str, password: str = "senha123") -> dict:

@@ -17,8 +17,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.model.models import FoodCategory
-from app.schemas.categoria_alimento_schemas import (
+from backend.app.model.models import FoodCategory
+from backend.app.schemas.categoria_alimento_schemas import (
     CategoriaAlimentoCreate,
     CategoriaAlimentoUpdate,
 )

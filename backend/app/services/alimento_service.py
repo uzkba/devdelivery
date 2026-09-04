@@ -1,9 +1,9 @@
 import uuid
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
-from app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
-from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate
-from app.services.auditoria_service import (
+from backend.app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
+from backend.app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate
+from backend.app.services.auditoria_service import (
     registrar_log_auditoria, serializar_entidade, ACAO_CRIACAO, ACAO_EDICAO, ACAO_EXCLUSAO,
 )
 

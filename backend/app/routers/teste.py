@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
-from app.api.depedencias import require_role
-from app.schemas.autenticacao_schemas import AuthenticatedUser
+from backend.app.api.depedencias import require_role
+from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
 
 router = APIRouter(tags=["teste"])
 

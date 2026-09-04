@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import (
+from backend.app.routers import (
     alimento_route,
     autenticacao_route,
     cardapio_route,

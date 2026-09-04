@@ -1,5 +1,5 @@
 import uuid
-from app.model.models import Food, FoodCategory, AuditLog
+from backend.app.model.models import Food, FoodCategory, AuditLog
 
 
 def _criar_categoria(db, restaurante):

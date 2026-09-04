@@ -25,7 +25,7 @@ services:
     volumes:
       - ./backend:/app
     env_file:
-      - ./backend/.env
+      - ./backend/.env.docker
 
   frontend:
     build: ./frontend

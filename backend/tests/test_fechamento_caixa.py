@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from decimal import Decimal
 
-from app.model.models import CashClosing
+from backend.app.model.models import CashClosing
 
 
 # ── helpers de payload ──────────────────────────────────────────────

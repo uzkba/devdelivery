@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from app.model.models import Order, OrderStatus
+from backend.app.model.models import Order, OrderStatus
 
 
 def _status(db, code, name, order=1, is_final=False):
