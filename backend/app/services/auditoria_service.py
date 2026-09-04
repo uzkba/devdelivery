@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from backend.app.model.models import AuditLog
+from app.model.models import AuditLog
 
 ACAO_CRIACAO = "CRIACAO"
 ACAO_EDICAO = "EDICAO"

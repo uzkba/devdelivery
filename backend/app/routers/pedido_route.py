@@ -3,9 +3,9 @@ import math
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import get_current_user
-from backend.app.schemas.pedido_schemas import (
+from app.core.database import get_db
+from app.api.depedencias import get_current_user
+from app.schemas.pedido_schemas import (
     OrderCreate, OrderOut, OrderListItemOut, PaginatedOrdersOut,
 )
 from backend.app.services import pedido_service

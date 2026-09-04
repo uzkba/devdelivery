@@ -5,8 +5,8 @@ from typing import List
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from backend.app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem
-from backend.app.schemas.cardapio_schemas import CardapioCreate, CardapioItensCreate
+from app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem
+from app.schemas.cardapio_schemas import CardapioCreate, CardapioItensCreate
 
 
 def obter_cardapio_do_dia(db: Session, restaurant_id: uuid.UUID, dia: date) -> Menu | None:

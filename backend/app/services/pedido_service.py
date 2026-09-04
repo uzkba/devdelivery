@@ -11,8 +11,8 @@ from backend.app.model.models import (
     PaymentMethod,
     Restaurant,
 )
-from backend.app.schemas.pedido_schemas import OrderCreate
-from backend.app.model.models import (
+from app.schemas.pedido_schemas import OrderCreate
+from app.model.models import (
     Order, OrderItem, OrderItemOption,
     Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
 )

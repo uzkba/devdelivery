@@ -2,8 +2,8 @@ import uuid
 import pytest
 from decimal import Decimal
 
-from backend.app.model.models import Restaurant, AdminUser, Food, FoodCategory
-from backend.app.core.seguranca import hash_password
+from app.model.models import Restaurant, AdminUser, Food, FoodCategory
+from app.core.seguranca import hash_password
 
 
 @pytest.fixture()
