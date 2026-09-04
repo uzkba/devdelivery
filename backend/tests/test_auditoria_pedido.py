@@ -2,7 +2,7 @@ import pytest
 from datetime import date
 from decimal import Decimal
 
-from app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem
+from backend.app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem, DeliveryRule
 
 
 @pytest.fixture()
@@ -65,6 +65,15 @@ def test_criar_pedido_gera_log_auditoria(
         "valor_pago_dinheiro": "30.00",
         "itens": [{"alimento_id": str(alimento.id), "quantidade": 2, "opcoes_selecionadas": []}],
     }
+    regra = DeliveryRule(
+    restaurant_id=restaurante.id,
+    min_distance_km=Decimal("0.0"),
+    max_distance_km=Decimal("10.0"),
+    fee=Decimal("0.00"),
+    is_active=True
+)
+    db.add(regra)
+    db.commit()
     resposta = client.post(
         "/pedidos", json=payload, headers={"Authorization": f"Bearer {token}"}
     )
