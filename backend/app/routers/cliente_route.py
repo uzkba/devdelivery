@@ -43,7 +43,7 @@ def registrar_cliente(
     )
 
 
-@router.post("/login/cliente", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse)
 def login_cliente(payload: ClienteLoginIn, db: Session = Depends(get_db)) -> TokenResponse:
     cliente = db.scalar(select(Client).where(Client.phone == payload.phone))
 
