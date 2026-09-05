@@ -23,9 +23,9 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
     env_file:
-      - ./backend/.env.docker
+      - ./backend/.env
 
   frontend:
     build: ./frontend
