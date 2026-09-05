@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { adminTokenStorage, clientTokenStorage } from "./tokenStorage";
+import { adminTokenStorage, clientTokenStorage } from "../tokenStorage";
 
 describe("tokenStorage", () => {
     beforeEach(() => localStorage.clear());

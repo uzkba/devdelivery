@@ -3,15 +3,15 @@ import { Navigate } from "react-router-dom";
 
 import { useClienteAuth } from "../../auth/ClienteAuthContext";
 
-interface RequireClienteAuthProps {
+interface RequireClientAuthProps {
     children: ReactNode;
 }
 
-export function RequireClienteAuth({ children }: RequireClienteAuthProps) {
+export function RequireClientAuth({ children }: RequireClientAuthProps) {
     const { isAuthenticated } = useClienteAuth();
 
     if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/cliente/login" replace />;
     }
 
     return <>{children}</>;
