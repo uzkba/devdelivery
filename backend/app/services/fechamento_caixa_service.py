@@ -7,8 +7,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.model.models import CashClosing, Order, OrderStatus, PaymentMethod
-from app.schemas.fechamento_caixa_schemas import CashClosingCreate
+from backend.app.model.models import CashClosing, Order, OrderStatus, PaymentMethod
+from backend.app.schemas.fechamento_caixa_schemas import CashClosingCreate
 
 _PAYMENT_CODE_TO_COLUMN = {
     "PIX": "total_pix",

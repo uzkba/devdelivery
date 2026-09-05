@@ -4,8 +4,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.seguranca import hash_password
-from app.model.models import Client
+from backend.app.core.seguranca import hash_password
+from backend.app.model.models import Client
 
 
 def criar_cliente(db: Session, name: str, phone: str, hashed_password: str | None = None) -> Client:

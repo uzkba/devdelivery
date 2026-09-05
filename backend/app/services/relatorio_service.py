@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.model.models import Order, OrderStatus
+from backend.app.model.models import Order, OrderStatus
 
 STATUS_CANCELADO_CODIGO = "CANCELADO"
 

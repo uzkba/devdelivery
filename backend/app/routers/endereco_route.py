@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.api.depedencias import require_role
-from app.model.models import Client, CustomerAddress
-from app.schemas.autenticacao_schemas import AuthenticatedUser
-from app.schemas.endereco_schemas import EnderecoCreate, EnderecoOut, EnderecoUpdate
+from backend.app.core.database import get_db
+from backend.app.api.depedencias import require_role
+from backend.app.model.models import Client, CustomerAddress
+from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
+from backend.app.schemas.endereco_schemas import EnderecoCreate, EnderecoOut, EnderecoUpdate
 
 router = APIRouter(prefix="/clientes/{cliente_id}/enderecos", tags=["Endereços"])
 

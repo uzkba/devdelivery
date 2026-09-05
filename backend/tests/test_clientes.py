@@ -1,5 +1,5 @@
-from app.core.seguranca import create_access_token
-from app.model.models import Client
+from backend.app.core.seguranca import create_access_token
+from backend.app.model.models import Client
 from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 

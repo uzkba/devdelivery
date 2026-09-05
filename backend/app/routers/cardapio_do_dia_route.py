@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.database import get_db
-from app.model.models import Food, FoodCategory, Menu, MenuItem, ModifierGroup
+from backend.app.core.database import get_db
+from backend.app.model.models import Food, FoodCategory, Menu, MenuItem, ModifierGroup
 
 router = APIRouter()
 

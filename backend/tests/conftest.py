@@ -1,44 +1,42 @@
 import os
+import uuid
+from decimal import Decimal
 from pathlib import Path
-from dotenv import find_dotenv, load_dotenv
 
+import pytest
+from alembic import command
+from alembic.config import Config
+from dotenv import find_dotenv, load_dotenv
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+
+# Carrega variáveis de ambiente
 load_dotenv(find_dotenv())
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-import uuid
-from decimal import Decimal
-import pytest
-from alembic import command
-from alembic.config import Config
-from alembic.util import status
-
-
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
-from app.model.models import Base, AdminUser, Order, OrderStatus, PaymentMethod, Restaurant, AuditLog
-
-
-from fastapi.testclient import TestClient
-
-from app.core.database import get_db
-from app.core.seguranca import hash_password, create_access_token as create_access_token_cliente
-from main import app
-from app.model.models import Client, CustomerAddress
-from app.routers.autenticacao_route import create_access_token
-
+# Importações da aplicação
+from backend.main import app
+from backend.app.core.database import get_db
+from backend.app.core.seguranca import hash_password
+from backend.app.routers.autenticacao_route import create_access_token
+from backend.app.model.models import (
+    Base,
+    AdminUser,
+    Order,
+    OrderStatus,
+    PaymentMethod,
+    Restaurant,
+    AuditLog,
+    Client,
+    CustomerAddress,
+)
 
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-@pytest.fixture()
-def token_para_cliente(db):
-    def _token_para_cliente(cliente) -> str:
-        return create_access_token(data={"sub": str(cliente.id), "type": "client"})
-    return _token_para_cliente
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -51,18 +49,6 @@ def _aplicar_migrations():
 
 @pytest.fixture(scope="function")
 def db():
-    """
-    Cria uma conexão e uma transação isolada para cada teste.
-
-    Usa o padrão de SAVEPOINT (nested transaction) em vez de depender só
-    de connection.begin()/rollback(): os services chamam session.commit()
-    de dentro da aplicação (ex: criar_pedido, criar_alimento), e um commit
-    "normal" numa session vinculada direto à connection encerraria a
-    transação externa de verdade — fazendo o rollback do teardown virar
-    no-op e vazando dados de teste pro banco. O listener abaixo reabre
-    um SAVEPOINT toda vez que o código sob teste comita, então o
-    transaction.rollback() final sempre tem o que desfazer.
-    """
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
@@ -86,10 +72,7 @@ def db():
 @pytest.fixture(scope="function")
 def client(db):
     def override_get_db():
-        try:
-            yield db
-        finally:
-            pass
+        yield db
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
@@ -98,8 +81,30 @@ def client(db):
 
 
 @pytest.fixture()
+def token_para_cliente(db):
+    def _token_para_cliente(cliente) -> str:
+        return create_access_token(data={"sub": str(cliente.id), "type": "client"})
+    return _token_para_cliente
+
+
+@pytest.fixture()
+def token_para(db):
+    def _token_para(user) -> str:
+        return create_access_token(
+            data={
+                "sub": str(user.id),
+                "login": user.login,
+                "name": user.name,
+                "role": user.role,
+                "restaurant_id": str(user.restaurant_id),
+            }
+        )
+    return _token_para
+
+
+@pytest.fixture()
 def restaurante(db):
-    r = Restaurant(trade_name="Marmitas da Vovó")
+    r = Restaurant(trade_name="Marmitas da Vovó", latitude=-23.5505, longitude=-46.6333)
     db.add(r)
     db.flush()
     db.refresh(r)
@@ -188,6 +193,8 @@ def endereco(db, cliente):
         number="123",
         neighborhood="Centro",
         primary_address=True,
+        latitude=Decimal("-23.555000"),
+        longitude=Decimal("-46.635000")
     )
     db.add(e)
     db.flush()
@@ -203,6 +210,8 @@ def endereco_secundario(db, cliente):
         number="456",
         neighborhood="Bairro Novo",
         primary_address=False,
+        latitude=Decimal("-23.560000"),
+        longitude=Decimal("-46.640000")
     )
     db.add(e)
     db.flush()
@@ -259,24 +268,8 @@ def entregador_user(db, restaurante):
 
 
 @pytest.fixture()
-def token_para(db):
-    def _token_para(user) -> str:
-        return create_access_token(
-            data={
-                "sub": str(user.id),
-                "login": user.login,
-                "name": user.name,
-                "role": user.role,
-                "restaurant_id": str(user.restaurant_id),
-            }
-        )
-    return _token_para
-
-
-@pytest.fixture()
 def outro_restaurante(db):
-    """Fixture global de um segundo restaurante para testes multi-tenant."""
-    r = Restaurant(trade_name="Marmitas do Zé (Restaurante B)")
+    r = Restaurant(trade_name="Marmitas do Zé (Restaurante B)", latitude=-23.5505, longitude=-46.6333)
     db.add(r)
     db.flush()
     db.refresh(r)
@@ -285,7 +278,6 @@ def outro_restaurante(db):
 
 @pytest.fixture()
 def outro_admin_user(db, outro_restaurante):
-    """Fixture global de um admin pertencente ao segundo restaurante."""
     user = AdminUser(
         restaurant_id=outro_restaurante.id,
         name="Zé Admin",
@@ -312,15 +304,13 @@ def _get_or_create_status(db, code, name, order, is_final):
 
 @pytest.fixture()
 def status_criado(db):
-    """Garante que existe o status inicial do pedido."""
     return _get_or_create_status(db, "CRIADO", "Criado", 1, False)
 
 
-@pytest.fixture()
-def forma_pagamento_dinheiro(db):
-    fp = db.query(PaymentMethod).filter_by(code="DINHEIRO").first()
+def _get_or_create_payment_method(db, code, name):
+    fp = db.query(PaymentMethod).filter_by(code=code).first()
     if fp is None:
-        fp = PaymentMethod(code="DINHEIRO", name="Dinheiro", is_active=True)
+        fp = PaymentMethod(code=code, name=name, is_active=True)
         db.add(fp)
         db.flush()
         db.refresh(fp)
@@ -328,8 +318,27 @@ def forma_pagamento_dinheiro(db):
 
 
 @pytest.fixture()
+def forma_pagamento_dinheiro(db):
+    return _get_or_create_payment_method(db, "DINHEIRO", "Dinheiro")
+
+
+@pytest.fixture()
+def forma_pagamento_pix(db):
+    return _get_or_create_payment_method(db, "PIX", "Pix")
+
+
+@pytest.fixture()
+def forma_pagamento_debito(db):
+    return _get_or_create_payment_method(db, "CARTAO_DEBITO", "Cartão de Débito")
+
+
+@pytest.fixture()
+def forma_pagamento_credito(db):
+    return _get_or_create_payment_method(db, "CARTAO_CREDITO", "Cartão de Crédito")
+
+
+@pytest.fixture()
 def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, status_criado):
-    """Pedido básico no status inicial, pronto pra testar transições de status."""
     pedido = Order(
         restaurant_id=restaurante.id,
         client_id=cliente.id,
@@ -400,18 +409,9 @@ def algum_log_de_alimento(db, restaurante, admin_user):
     db.refresh(log)
     return log
 
-def _get_or_create_payment_method(db, code, name):
-    fp = db.query(PaymentMethod).filter_by(code=code).first()
-    if fp is None:
-        fp = PaymentMethod(code=code, name=name, is_active=True)
-        db.add(fp)
-        db.flush()
-        db.refresh(fp)
-    return fp
 
 @pytest.fixture()
 def status_entregue(db):
-    # já vem seedado pela migration com pago=True — is_final=True
     return _get_or_create_status(db, "ENTREGUE", "Entregue", 5, True)
 
 
@@ -422,28 +422,11 @@ def status_cancelado(db):
 
 @pytest.fixture()
 def status_confirmado(db):
-    # status intermediário, não pago — útil para testar que pedidos não entregues ficam fora do fechamento
     return _get_or_create_status(db, "CONFIRMADO", "Confirmado", 2, False)
 
 
 @pytest.fixture()
-def forma_pagamento_pix(db):
-    return _get_or_create_payment_method(db, "PIX", "Pix")
-
-
-@pytest.fixture()
-def forma_pagamento_debito(db):
-    return _get_or_create_payment_method(db, "CARTAO_DEBITO", "Cartão de Débito")
-
-
-@pytest.fixture()
-def forma_pagamento_credito(db):
-    return _get_or_create_payment_method(db, "CARTAO_CREDITO", "Cartão de Crédito")
-
-
-@pytest.fixture()
 def criar_pedido_direto(db, restaurante, cliente, endereco):
-    """Helper para criar pedidos direto no banco, com controle de status/forma/data/valores."""
     def _criar(status, forma_pagamento, total_amount, order_datetime, **overrides):
         dados = dict(
             restaurant_id=restaurante.id,

@@ -10,7 +10,13 @@ class TestCriarEndereco:
     def test_criar_endereco_sucesso(self, client, cliente):
         response = client.post(
             f"/clientes/{cliente.id}/enderecos/",
-            json={"street": "Rua das Flores", "number": "123", "neighborhood": "Centro"},
+            json={
+                "street": "Rua das Flores",
+                "number": "123",
+                "neighborhood": "Centro",
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 201
         data = response.json()
@@ -20,18 +26,38 @@ class TestCriarEndereco:
     def test_criar_endereco_cliente_inexistente_retorna_404(self, client):
         response = client.post(
             f"/clientes/{uuid.uuid4()}/enderecos/",
-            json={"street": "Rua X", "number": "1", "neighborhood": "Bairro"},
+            json={
+                "street": "Rua X", 
+                "number": "1", 
+                "neighborhood": "Bairro",
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 404
 
     def test_criar_dois_enderecos_principais_retorna_409(self, client, cliente):
         client.post(
             f"/clientes/{cliente.id}/enderecos/",
-            json={"street": "Rua A", "number": "1", "neighborhood": "B1", "primary_address": True},
+            json={
+                "street": "Rua A", 
+                "number": "1", 
+                "neighborhood": "B1", 
+                "primary_address": True,
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         response = client.post(
             f"/clientes/{cliente.id}/enderecos/",
-            json={"street": "Rua B", "number": "2", "neighborhood": "B2", "primary_address": True},
+            json={
+                "street": "Rua B", 
+                "number": "2", 
+                "neighborhood": "B2", 
+                "primary_address": True,
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 409
 
@@ -90,7 +116,11 @@ class TestAtualizarEndereco:
     def test_atualizar_endereco_sucesso(self, client, cliente, endereco):
         response = client.put(
             f"/clientes/{cliente.id}/enderecos/{endereco.id}",
-            json={"neighborhood": "Novo Bairro"},
+            json={
+                "neighborhood": "Novo Bairro",
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 200
         assert response.json()["neighborhood"] == "Novo Bairro"
@@ -98,14 +128,22 @@ class TestAtualizarEndereco:
     def test_atualizar_endereco_inexistente_retorna_404(self, client, cliente):
         response = client.put(
             f"/clientes/{cliente.id}/enderecos/{uuid.uuid4()}",
-            json={"neighborhood": "X"},
+            json={
+                "neighborhood": "X",
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 404
 
     def test_atualizar_endereco_de_outro_cliente_retorna_404(self, client, outro_cliente, endereco):
         response = client.put(
             f"/clientes/{outro_cliente.id}/enderecos/{endereco.id}",
-            json={"neighborhood": "X"},
+            json={
+                "neighborhood": "X",
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 404
 
@@ -114,7 +152,11 @@ class TestAtualizarEndereco:
     ):
         response = client.put(
             f"/clientes/{cliente.id}/enderecos/{endereco_secundario.id}",
-            json={"primary_address": True},
+            json={
+                "primary_address": True,
+                "latitude": -23.5505,
+                "longitude": -46.6333
+            },
         )
         assert response.status_code == 409
 

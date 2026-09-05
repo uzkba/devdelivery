@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.core.seguranca import (
+from backend.app.core.database import get_db
+from backend.app.core.seguranca import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     verify_password,
