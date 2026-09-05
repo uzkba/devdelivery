@@ -1,6 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { LoginPage } from "../features/auth/pages/LoginPage";
 import { AdminOverviewPage } from "../features/admin/pages/AdminOverviewPage";
 import { CardapioPage } from "../features/cardapio/pages/CardapioPage";
 import { PedidosPage } from "../features/pedido/pages/PedidosPage";
@@ -10,13 +9,14 @@ import { AdminLayout } from "../shared/layout/admin/AdminLayout";
 import { RequireRole } from "../shared/layout/admin/RequireRole";
 import { getRolesForPath } from "../shared/layout/admin/adminNavItems";
 import { AuthProvider } from "../shared/auth/StaffAuthContext";
-
 import { CardapioClientePage } from "../features/cliente/pages/CardapioClientePage";
 import { MeusPedidosPage } from "../features/cliente/pages/MeusPedidosPage";
 import { EnderecosPage } from "../features/cliente/pages/EnderecosPage";
 import { ClientLayout } from "../shared/layout/cliente/ClientLayout";
-import { RequireClienteAuth } from "../shared/layout/cliente/RequireClienteAuth";
 import { ClienteAuthProvider } from "../shared/auth/ClienteAuthContext";
+import StaffLoginPage from "@/features/auth/pages/StaffLoginPage";
+import { RequireClientAuth } from "@/shared/layout/cliente/RequireClientAuth";
+import ClientLoginPage from "@/features/cliente/pages/ClientLoginPage";
 
 function App() {
   return (
@@ -24,7 +24,9 @@ function App() {
       <AuthProvider>
         <ClienteAuthProvider>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login" element={<StaffLoginPage />} />
+
+            <Route path="/cliente/login" element={<ClientLoginPage />} />
 
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverviewPage />} />
@@ -69,33 +71,33 @@ function App() {
               <Route
                 index
                 element={
-                  <RequireClienteAuth>
+                  <RequireClientAuth>
                     <CardapioClientePage />
-                  </RequireClienteAuth>
+                  </RequireClientAuth>
                 }
               />
               <Route
                 path="cardapio"
                 element={
-                  <RequireClienteAuth>
+                  <RequireClientAuth>
                     <CardapioClientePage />
-                  </RequireClienteAuth>
+                  </RequireClientAuth>
                 }
               />
               <Route
                 path="pedidos"
                 element={
-                  <RequireClienteAuth>
+                  <RequireClientAuth>
                     <MeusPedidosPage />
-                  </RequireClienteAuth>
+                  </RequireClientAuth>
                 }
               />
               <Route
                 path="enderecos"
                 element={
-                  <RequireClienteAuth>
+                  <RequireClientAuth>
                     <EnderecosPage />
-                  </RequireClienteAuth>
+                  </RequireClientAuth>
                 }
               />
             </Route>

@@ -16,14 +16,16 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/dockerfile
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./backend:/app/backend
+      - .:/app
     env_file:
       - ./backend/.env
 

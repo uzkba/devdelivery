@@ -5,6 +5,8 @@ import {
     useState,
     type ReactNode,
 } from "react";
+import { adminTokenStorage } from "./tokenStorage";
+import { decodeJwtPayload } from "../utils/jwt";
 
 export type UserRole = "admin" | "atendente" | "caixa" | "entregador";
 
@@ -18,40 +20,57 @@ export interface AuthUser {
 interface AuthContextData {
     user: AuthUser | null;
     isAuthenticated: boolean;
-    login: () => void;
+    login: (token: string) => void;
     logout: () => void;
 }
 
-const MOCK_USER: AuthUser = {
-    id: "admin-001",
-    nome: "Marcos Ferreira",
-    email: "marcos@devdelivery.com",
-    role: "admin",
-};
-
 const AuthContext = createContext<AuthContextData | undefined>(undefined);
+
+function buildUserFromToken(token: string): AuthUser {
+    const payload = decodeJwtPayload(token);
+    return {
+        id: payload.sub,
+        nome: payload.name,
+        email: payload.login,
+        role: payload.role,
+    };
+}
+
+function getInitialUser(): AuthUser | null {
+    const token = adminTokenStorage.get();
+    if (!token) return null;
+
+    try {
+        return buildUserFromToken(token);
+    } catch {
+        adminTokenStorage.clear();
+        return null;
+    }
+}
 
 interface AuthProviderProps {
     children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-    const [user, setUser] = useState<AuthUser | null>(MOCK_USER);
+    const [user, setUser] = useState<AuthUser | null>(getInitialUser);
 
-    const login = () => {
-        setUser(MOCK_USER);
+    const login = (token: string) => {
+        adminTokenStorage.set(token);
+        setUser(buildUserFromToken(token));
     };
 
     const logout = () => {
+        adminTokenStorage.clear();
         setUser(null);
     };
 
     const value = useMemo(
         () => ({
-        user,
-        isAuthenticated: user !== null,
-        login,
-        logout,
+            user,
+            isAuthenticated: user !== null,
+            login,
+            logout,
         }),
         [user],
     );

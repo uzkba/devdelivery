@@ -1,3 +1,4 @@
+// shared/api/clientApi.ts
 import type { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { createApiInstance } from "./apiFactory";
 import { clientTokenStorage } from "../auth/tokenStorage";
@@ -16,11 +17,11 @@ clientApi.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
         if (error.response?.status === 401) {
-        clientTokenStorage.clear();
-        if (!window.location.pathname.startsWith("/cliente/login")) {
-            window.location.href = "/cliente/login";
-        }
+            clientTokenStorage.clear();
+            if (!window.location.pathname.startsWith("/cliente/login")) {
+                window.location.href = "/cliente/login";
+            }
         }
         return Promise.reject(error);
-    }
+    },
 );
