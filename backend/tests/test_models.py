@@ -1,8 +1,8 @@
 import pytest
 import uuid
 from sqlalchemy.exc import IntegrityError
-from backend.app.core.seguranca import hash_password
-from backend.app.model.models import Client, CustomerAddress
+from app.core.seguranca import hash_password
+from app.model.models import Client, CustomerAddress
 
 
 def test_criar_cliente(db):

@@ -4,21 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db
-from backend.app.core.seguranca import (
+from app.core.database import get_db
+from app.core.seguranca import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     verify_password,
 )
-from backend.app.model.models import AdminUser, Client
-from backend.app.schemas.autenticacao_schemas import AuthenticatedUser, LoginRequest, TokenResponse
-from backend.app.schemas.cliente_schemas import ClienteLoginIn
-from backend.app.api.depedencias import get_current_user
+from app.model.models import AdminUser
+from app.schemas.autenticacao_schemas import AuthenticatedUser, LoginRequest, TokenResponse
+from app.api.depedencias import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login/admin", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(AdminUser).where(AdminUser.login == payload.login))
     credenciais_invalidas = HTTPException(
@@ -58,12 +57,3 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 @router.get("/me", response_model=AuthenticatedUser)
 def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
     return current_user
-
-@router.post("/login", response_model=TokenResponse)
-def login_cliente(payload: ClienteLoginIn, db: Session = Depends(get_db)) -> TokenResponse:
-    cliente = db.scalar(select(Client).where(Client.phone == payload.phone))
-    if cliente is None or not verify_password(payload.password, cliente.hashed_password):
-        raise HTTPException(status_code=401, detail="Telefone ou senha inválidos.")
-
-    token = create_access_token(data={"sub": str(cliente.id), "type": "client"})
-    return TokenResponse(access_token=token, expires_in=...)

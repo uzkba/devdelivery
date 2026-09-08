@@ -4,9 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.depedencias import get_current_user, get_db
-from backend.app.services import relatorio_service
-from backend.app.schemas.relatorio_schemas import RelatorioPedidosOut
+from app.api.depedencias import get_current_user, get_db
+from app.services import relatorio_service
+from app.schemas.relatorio_schemas import RelatorioPedidosOut
 
 router = APIRouter(prefix="/relatorios", tags=["relatorios"])
 

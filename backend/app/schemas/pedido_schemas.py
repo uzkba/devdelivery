@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class OrderItemOptionCreate(BaseModel):
     opcao_complemento_id: uuid.UUID
     quantidade: int = Field(default=1, gt=0)
@@ -36,10 +37,16 @@ class OrderItemOut(BaseModel):
     alimento_id: Optional[uuid.UUID] = Field(validation_alias="food_id")
     nome_alimento: str = Field(validation_alias="food_name")
     preco_base_unitario: Decimal = Field(validation_alias="base_price")
-    quantidade: int = Field(validation_alias="quantity")  # <-- CORRIGIDO AQUI!
+    quantidade: int = Field(validation_alias="quantity")
     subtotal: Decimal
     observacoes: Optional[str] = Field(default=None, validation_alias="notes")
     opcoes_selecionadas: List[OrderItemOptionOut] = Field(default=[], validation_alias="selected_options")
+
+class ClienteResumoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nome: str = Field(validation_alias="name")
+    telefone: str = Field(validation_alias="phone")
 
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -61,7 +68,11 @@ class OrderOut(BaseModel):
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
-    itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+class OrderStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    code: str
+    name: str
+    is_final: bool
 
 class OrderListItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True) 
@@ -69,10 +80,9 @@ class OrderListItemOut(BaseModel):
     numero_pedido: int = Field(validation_alias="order_number")
     cliente_id: uuid.UUID = Field(validation_alias="client_id")
     cliente_nome: str
-    status_id: uuid.UUID
+    status: OrderStatusOut
     data_hora: datetime = Field(validation_alias="order_datetime")
     valor_total: Decimal = Field(validation_alias="total_amount")
-
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
@@ -85,10 +95,3 @@ class PaginatedOrdersOut(BaseModel):
     page: int
     page_size: int
     total_pages: int
-
-
-class ClienteResumoOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    nome: str = Field(validation_alias="name")
-    telefone: str = Field(validation_alias="phone")

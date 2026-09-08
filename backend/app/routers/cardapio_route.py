@@ -4,17 +4,17 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.depedencias import require_role
-from backend.app.core.database import get_db
-from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
-from backend.app.schemas.cardapio_schemas import (
+from app.api.depedencias import require_role
+from app.core.database import get_db
+from app.schemas.autenticacao_schemas import AuthenticatedUser
+from app.schemas.cardapio_schemas import (
     CardapioCreate,
     CardapioItensCreate,
     CardapioResponse,
     MenuItemAvailabilityUpdate,
     MenuItemOut,
 )
-from backend.app.services import cardapio_service
+from app.services import cardapio_service
 
 router = APIRouter(prefix="/cardapio", tags=["cardapio"])
 

@@ -15,14 +15,14 @@ from decimal import Decimal
 
 import pytest
 
-from backend.app.core.seguranca import create_access_token, hash_password
-from backend.app.model.models import AdminUser, AuditLog, Food, FoodCategory, Menu, MenuItem, Restaurant
+from app.core.seguranca import create_access_token, hash_password
+from app.model.models import AdminUser, AuditLog, Food, FoodCategory, Menu, MenuItem, Restaurant
 
 RESTAURANTE_ID_PADRAO = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 def _headers(client, login: str, password: str = "senha123") -> dict:
-    response = client.post("/auth/login", json={"login": login, "password": password})
+    response = client.post("/auth/login/admin", json={"login": login, "password": password})
     assert response.status_code == 200, f"login falhou para {login}: {response.text}"
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
