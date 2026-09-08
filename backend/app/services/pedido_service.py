@@ -236,10 +236,11 @@ def listar_pedidos(
     restaurant_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
-) -> tuple[list[tuple[Order, str]], int]:
+) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
-        db.query(Order, Client.name)
+        db.query(Order, Client.name, OrderStatus)
         .join(Client, Client.id == Order.client_id)
+        .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.restaurant_id == restaurant_id)
     )
     total = query.count()
@@ -257,10 +258,11 @@ def listar_pedidos_cliente(
     client_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
-) -> tuple[list[tuple[Order, str]], int]:
+) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
-        db.query(Order, Client.name)
+        db.query(Order, Client.name, OrderStatus)
         .join(Client, Client.id == Order.client_id)
+        .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.client_id == client_id)
     )
     total = query.count()

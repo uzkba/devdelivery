@@ -59,10 +59,10 @@ def listar_pedidos(
     items = [
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
-            cliente_nome=nome, status_id=pedido.status_id, data_hora=pedido.order_datetime,
+            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime,
             valor_total=pedido.total_amount,
         )
-        for pedido, nome in resultados
+        for pedido, nome, status_obj in resultados
     ]
     return PaginatedOrdersOut(
         items=items, total=total, page=page, page_size=page_size,
@@ -84,10 +84,10 @@ def listar_meus_pedidos(
     items = [
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
-            cliente_nome=nome, status_id=pedido.status_id, data_hora=pedido.order_datetime,
+            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime,
             valor_total=pedido.total_amount,
         )
-        for pedido, nome in resultados
+        for pedido, nome, status_obj in resultados
     ]
     
     return PaginatedOrdersOut(

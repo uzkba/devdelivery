@@ -68,13 +68,19 @@ class OrderOut(BaseModel):
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
+class OrderStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    code: str
+    name: str
+    is_final: bool
+
 class OrderListItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True) 
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
     cliente_id: uuid.UUID = Field(validation_alias="client_id")
     cliente_nome: str
-    status_id: uuid.UUID
+    status: OrderStatusOut
     data_hora: datetime = Field(validation_alias="order_datetime")
     valor_total: Decimal = Field(validation_alias="total_amount")
 
