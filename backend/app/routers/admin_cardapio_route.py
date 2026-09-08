@@ -5,11 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import date as date_type
 
-from backend.app.core.database import get_db
-from backend.app.model.models import Menu, MenuItem, Food
-from backend.app.schemas.admin_cardapio_schema import MenuCreate, MenuItemUpdate
-from backend.app.schemas.autenticacao_schemas import AuthenticatedUser
-from backend.app.api.depedencias import get_current_user
+from app.core.database import get_db
+from app.model.models import Menu, MenuItem, Food
+from app.schemas.admin_cardapio_schema import MenuCreate, MenuItemUpdate
+from app.schemas.autenticacao_schemas import AuthenticatedUser
+from app.api.depedencias import get_current_user
 
 router = APIRouter(prefix="/admin/cardapio", tags=["Admin Cardapio"])
 

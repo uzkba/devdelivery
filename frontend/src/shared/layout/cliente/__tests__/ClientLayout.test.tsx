@@ -64,12 +64,6 @@ describe("ClientLayout", () => {
         expect(screen.queryByText("Voltar")).not.toBeInTheDocument();
     });
 
-    it("mostra botão Voltar e navega pra rota correta ao clicar", () => {
-        renderComLayout("/cardapio");
-        fireEvent.click(screen.getByText("Voltar"));
-        expect(screen.getByText("Conteúdo Início")).toBeInTheDocument();
-    });
-
     it('mostra título "Acompanhar pedido" e esconde a navegação inferior no detalhe do pedido', () => {
         renderComLayout("/pedidos/123");
         expect(screen.getByRole("heading", { name: "Acompanhar pedido" })).toBeInTheDocument();

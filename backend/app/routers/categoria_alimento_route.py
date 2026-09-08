@@ -24,14 +24,14 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.depedencias import AuthenticatedUser, require_role
-from backend.app.core.database import get_db
-from backend.app.schemas.categoria_alimento_schemas import (
+from app.api.depedencias import AuthenticatedUser, require_role
+from app.core.database import get_db
+from app.schemas.categoria_alimento_schemas import (
     CategoriaAlimentoCreate,
     CategoriaAlimentoResponse,
     CategoriaAlimentoUpdate,
 )
-from backend.app.services import categoria_alimento_service as service
+from app.services import categoria_alimento_service as service
 
 router = APIRouter(prefix="/categorias", tags=["Categorias de Alimento"])
 

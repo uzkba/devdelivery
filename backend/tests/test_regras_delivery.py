@@ -3,9 +3,9 @@ from decimal import Decimal
 from fastapi import HTTPException
 
 # Adapte os imports conforme a estrutura real das suas pastas
-from backend.app.schemas.regras_delivery_schemas import DeliveryRuleCreate
-from backend.app.services.regras_delivery_service import criar_regra_entrega
-from backend.app.model.models import DeliveryRule
+from app.schemas.regras_delivery_schemas import DeliveryRuleCreate
+from app.services.regras_delivery_service import criar_regra_entrega
+from app.model.models import DeliveryRule
 
 def test_criar_regra_entrega_com_sucesso(db, restaurante):
     # Setup: Payload de criação

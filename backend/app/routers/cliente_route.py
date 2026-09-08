@@ -3,23 +3,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import require_role
-from backend.app.core.seguranca import (
+from app.core.database import get_db
+from app.api.depedencias import require_role
+from app.core.seguranca import (
     hash_password,
     verify_password,
     create_access_token as create_access_token_cliente,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from backend.app.schemas.autenticacao_schemas import AuthenticatedUser, TokenResponse
-from backend.app.schemas.cliente_schemas import (
+from app.schemas.autenticacao_schemas import AuthenticatedUser, TokenResponse
+from app.schemas.cliente_schemas import (
     ClienteCreate,
     ClienteOut,
     ClienteRegistrarIn,
     ClienteLoginIn,
 )
-from backend.app.model.models import Client
-from backend.app.services import cliente_service
+from app.model.models import Client
+from app.services import cliente_service
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 

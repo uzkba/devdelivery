@@ -1,7 +1,7 @@
 # backend/app/api/routers/ws_notifications.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
-from backend.app.core.websockets import manager
-from backend.app.core.seguranca import decode_access_token
+from app.core.websockets import manager
+from app.core.seguranca import decode_access_token
 import uuid
 
 router = APIRouter(tags=["WebSockets"])
