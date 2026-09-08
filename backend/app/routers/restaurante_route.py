@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
-from backend.app.model.models import Restaurant
-from backend.app.schemas.restaurante_schemas import RestaurantOut
+from app.core.database import get_db
+from app.model.models import Restaurant
+from app.schemas.restaurante_schemas import RestaurantOut
 
 
 router = APIRouter(prefix="/restaurante", tags=["Restaurante"])

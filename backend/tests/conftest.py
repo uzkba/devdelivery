@@ -20,10 +20,10 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Importações da aplicação
 from backend.main import app
-from backend.app.core.database import get_db
-from backend.app.core.seguranca import hash_password
-from backend.app.routers.autenticacao_route import create_access_token
-from backend.app.model.models import (
+from app.core.database import get_db
+from app.core.seguranca import hash_password
+from app.routers.autenticacao_route import create_access_token
+from app.model.models import (
     Base,
     AdminUser,
     Order,

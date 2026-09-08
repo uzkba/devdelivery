@@ -2,7 +2,7 @@ import pytest
 from datetime import date
 from decimal import Decimal
 
-from backend.app.model.models import (
+from app.model.models import (
     Food,
     FoodCategory,
     Menu,
@@ -13,7 +13,7 @@ from backend.app.model.models import (
     ModifierOption,
     CustomerAddress
 )
-from backend.app.core.seguranca import hash_password
+from app.core.seguranca import hash_password
 
 
 # ── fixtures/helpers locais ──

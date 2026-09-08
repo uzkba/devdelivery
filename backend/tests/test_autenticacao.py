@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from jose import jwt
 
-from backend.app.core.seguranca import (
+from app.core.seguranca import (
     ALGORITHM,
     SECRET_KEY,
     JWTError,

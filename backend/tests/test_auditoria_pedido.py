@@ -2,7 +2,7 @@ import pytest
 from datetime import date
 from decimal import Decimal
 
-from backend.app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem, DeliveryRule
+from app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem, DeliveryRule
 
 
 @pytest.fixture()

@@ -2,7 +2,7 @@ import pytest
 from datetime import date, timedelta
 from decimal import Decimal
 
-from backend.app.model.models import Food, FoodCategory, Menu, MenuItem, ModifierGroup, ModifierOption
+from app.model.models import Food, FoodCategory, Menu, MenuItem, ModifierGroup, ModifierOption
 
 
 # ── fixtures locais, mesmo padrão de test_alimento.py ──

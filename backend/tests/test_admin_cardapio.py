@@ -3,7 +3,7 @@ from datetime import date
 from uuid import uuid4
 from decimal import Decimal
 
-from backend.app.model.models import Food, FoodCategory, Menu, MenuItem
+from app.model.models import Food, FoodCategory, Menu, MenuItem
 
 # ==============================================================================
 # FIXTURES LOCAIS PARA OS TESTES DE CARDÁPIO

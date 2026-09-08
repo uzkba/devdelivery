@@ -4,13 +4,13 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import require_role
-from backend.app.model.models import CashClosing
-from backend.app.schemas.fechamento_caixa_schemas import (
+from app.core.database import get_db
+from app.api.depedencias import require_role
+from app.model.models import CashClosing
+from app.schemas.fechamento_caixa_schemas import (
     CashClosingCreate, CashClosingOut, PaginatedCashClosingsOut,
 )
-from backend.app.services import fechamento_caixa_service
+from app.services import fechamento_caixa_service
 
 router = APIRouter(prefix="/fechamento-caixa", tags=["Fechamento de Caixa"])
 

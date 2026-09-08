@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
-from backend.app.core.database import get_db
-from backend.app.api.depedencias import get_current_user, require_role
-from backend.app.schemas.regras_delivery_schemas import DeliveryRuleCreate, DeliveryRuleOut
-from backend.app.services import regras_delivery_service
+from app.core.database import get_db
+from app.api.depedencias import get_current_user, require_role
+from app.schemas.regras_delivery_schemas import DeliveryRuleCreate, DeliveryRuleOut
+from app.services import regras_delivery_service
 
 router = APIRouter(prefix="/admin/regras-entrega", tags=["Admin - Taxas de Entrega"])
 

@@ -2,8 +2,8 @@
 import uuid
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from backend.app.model.models import DeliveryRule
-from backend.app.schemas.regras_delivery_schemas import DeliveryRuleCreate
+from app.model.models import DeliveryRule
+from app.schemas.regras_delivery_schemas import DeliveryRuleCreate
 
 def criar_regra_entrega(db: Session, payload: DeliveryRuleCreate, restaurant_id: uuid.UUID) -> DeliveryRule:
     # Bloqueia regras que se sobrepõem no mesmo restaurante
