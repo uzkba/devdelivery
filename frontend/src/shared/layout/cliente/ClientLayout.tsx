@@ -20,7 +20,6 @@ const TITLES: Record<string, string> = {
 };
 
 const BACK_TARGETS: Record<string, string> = {
-    "/cardapio": "/",
     "/pedido/endereco": "/cardapio",
     "/pedido/pagamento": "/pedido/endereco",
     "/pedido/pagamento/pix": "/pedido/pagamento",

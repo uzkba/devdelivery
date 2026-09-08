@@ -16,3 +16,23 @@ export async function loginCliente(
     const { data } = await clientApi.post<TokenResponse>("/clientes/login", payload);
     return data;
 }
+
+export interface ClienteRegisterRequest {
+    name: string;
+    phone: string;
+    password: string;
+}
+
+export interface ClienteOut {
+    id: string;
+    name: string;
+    phone: string;
+    is_active: boolean;
+}
+
+export async function registrarCliente(
+    payload: ClienteRegisterRequest,
+): Promise<ClienteOut> {
+    const { data } = await clientApi.post<ClienteOut>("/clientes/registrar", payload);
+    return data;
+}
