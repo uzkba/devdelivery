@@ -1,19 +1,46 @@
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
+from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-from backend.app.core.database import Base
-from backend.app.model.models import *
+from app.core.database import Base
+from app.model.models import *
 
 config = context.config
 
-load_dotenv()
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
+# Diretórios do projeto
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+
+# Define qual ambiente será utilizado
+environment = os.getenv("DEVDELIVERY_ENV", "development")
+
+if environment == "test":
+    env_file = BACKEND_ROOT / ".env.test"
+else:
+    env_file = BACKEND_ROOT / ".env"
+
+# Carrega o arquivo de ambiente
+load_dotenv(env_file, override=True)
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        f"DATABASE_URL não encontrada em: {env_file}"
+    )
+
+# Proteção contra migration acidental no banco de desenvolvimento
+if environment == "test" and "devdelivery_test" not in DATABASE_URL:
+    raise RuntimeError(
+        "ABORTADO: ambiente de teste não está apontando para "
+        "o banco 'devdelivery_test'."
+    )
+
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
