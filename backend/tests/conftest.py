@@ -1,25 +1,29 @@
 import os
 import uuid
+from pathlib import Path
+
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
 # Carrega variáveis de ambiente
-load_dotenv(find_dotenv())
+load_dotenv(BACKEND_ROOT / ".env.test")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Importações da aplicação
-from backend.main import app
+from main import app
 from app.core.database import get_db
 from app.core.seguranca import hash_password
 from app.routers.autenticacao_route import create_access_token
