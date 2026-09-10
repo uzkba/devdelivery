@@ -34,6 +34,7 @@ app.add_middleware(
 app.include_router(autenticacao_route.router)
 app.include_router(cliente_route.router)
 app.include_router(teste.router)
+app.include_router(endereco_route.me_router)
 app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
 app.include_router(alimento_route.router)

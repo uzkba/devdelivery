@@ -11,7 +11,6 @@ import { getRolesForPath } from "@/shared/layout/admin/adminNavItems";
 import { AuthProvider } from "@/shared/auth/StaffAuthContext";
 import { CardapioClientePage } from "@/features/cliente/pages/CardapioClientePage";
 import { MeusPedidosPage } from "@/features/cliente/pages/MeusPedidosPage";
-import { EnderecosPage } from "@/features/cliente/pages/EnderecosPage";
 import ClientLayout from "@/shared/layout/cliente/ClientLayout";
 import { ClienteAuthProvider } from "../shared/auth/ClienteAuthContext";
 import StaffLoginPage from "@/features/auth/pages/StaffLoginPage";
@@ -20,6 +19,7 @@ import ClientLoginPage from "@/features/cliente/pages/LoginClientePage";
 import ClientRegisterPage from "@/features/cliente/pages/CadastroClientePage";
 import { MinhaContaPage } from "@/features/cliente/pages/MinhaContaPage";
 import { InicioPage } from "@/features/cliente/pages/InicioPage";
+import EnderecosPage from "@/features/cliente/pages/EnderecosPage";
 
 function App() {
     return (
