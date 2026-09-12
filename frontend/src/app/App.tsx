@@ -20,6 +20,10 @@ import ClientRegisterPage from "@/features/cliente/pages/CadastroClientePage";
 import { MinhaContaPage } from "@/features/cliente/pages/MinhaContaPage";
 import { InicioPage } from "@/features/cliente/pages/InicioPage";
 import EnderecosPage from "@/features/cliente/pages/EnderecosPage";
+import PagamentoPage from "@/features/pedido/pages/PagamentoPage";
+import PixPage from "@/features/pedido/pages/PixPage";
+import CartaoPage from "@/features/pedido/pages/CartaoPage";
+import DinheiroPage from "@/features/pedido/pages/DinheiroPage";
 
 function App() {
     return (
@@ -124,6 +128,40 @@ function App() {
                                 element={
                                     <RequireClientAuth>
                                         <EnderecosPage />
+                                    </RequireClientAuth>
+                                }
+                            />
+
+                            {/* Fluxo de checkout - pagamento (issue: Formulário de Forma de Pagamento) */}
+                            <Route
+                                path="pedido/pagamento"
+                                element={
+                                    <RequireClientAuth>
+                                        <PagamentoPage />
+                                    </RequireClientAuth>
+                                }
+                            />
+                            <Route
+                                path="pedido/pagamento/pix"
+                                element={
+                                    <RequireClientAuth>
+                                        <PixPage />
+                                    </RequireClientAuth>
+                                }
+                            />
+                            <Route
+                                path="pedido/pagamento/cartao"
+                                element={
+                                    <RequireClientAuth>
+                                        <CartaoPage />
+                                    </RequireClientAuth>
+                                }
+                            />
+                            <Route
+                                path="pedido/pagamento/dinheiro"
+                                element={
+                                    <RequireClientAuth>
+                                        <DinheiroPage />
                                     </RequireClientAuth>
                                 }
                             />
