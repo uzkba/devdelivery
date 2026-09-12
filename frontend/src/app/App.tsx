@@ -1,7 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AdminOverviewPage } from "@/features/admin/pages/AdminOverviewPage";
-import { CardapioPage } from "@/features/cardapio/pages/CardapioPage";
 import { PedidosPage } from "@/features/pedido/pages/PedidosPage";
 import { RelatoriosPage } from "@/features/relatorio/pages/RelatoriosPage";
 import { FechamentoCaixaPage } from "@/features/fechamento_caixa/pages/FechamentoCaixaPage";
@@ -9,7 +8,6 @@ import { AdminLayout } from "@/shared/layout/admin/AdminLayout";
 import { RequireRole } from "@/shared/layout/admin/RequireRole";
 import { getRolesForPath } from "@/shared/layout/admin/adminNavItems";
 import { AuthProvider } from "@/shared/auth/StaffAuthContext";
-import { CardapioClientePage } from "@/features/cliente/pages/CardapioClientePage";
 import { MeusPedidosPage } from "@/features/cliente/pages/MeusPedidosPage";
 import ClientLayout from "@/shared/layout/cliente/ClientLayout";
 import { ClienteAuthProvider } from "../shared/auth/ClienteAuthContext";
@@ -24,6 +22,8 @@ import PagamentoPage from "@/features/pedido/pages/PagamentoPage";
 import PixPage from "@/features/pedido/pages/PixPage";
 import CartaoPage from "@/features/pedido/pages/CartaoPage";
 import DinheiroPage from "@/features/pedido/pages/DinheiroPage";
+import { CardapioPage } from "@/features/cardapio/pages/CardapioPage";
+import CardapioClientePage from "@/features/cliente/pages/CardapioClientePage";
 
 function App() {
     return (
