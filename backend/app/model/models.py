@@ -370,9 +370,22 @@ class AuditLog(Base):
 
 class DeliveryRule(Base):
     __tablename__ = "delivery_rules"
+
     id = Column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id = Column(UUID, ForeignKey("restaurante.id"), nullable=False)
     min_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 0.00
     max_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 3.00
     fee = Column(Numeric(10, 2), nullable=False)            # Ex: 5.00
     is_active = Column(Boolean, default=True)
+
+
+class ReceivingAccount(Base):
+    __tablename__ = "conta_recebimento"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    pix_key: Mapped[str] = mapped_column("chave_pix", String(140), nullable=False)
+    pix_key_type: Mapped[str] = mapped_column("tipo_chave_pix", String(20), nullable=False)
+    account_holder: Mapped[str] = mapped_column("titular", String(150), nullable=False)
+    city: Mapped[str] = mapped_column("cidade", String(60), nullable=False)
+    active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, default=datetime.utcnow, nullable=False)

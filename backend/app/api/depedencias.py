@@ -10,7 +10,7 @@ from app.core.seguranca import JWTError, decode_access_token
 from app.model.models import AdminUser, Client
 from app.schemas.autenticacao_schemas import AuthenticatedUser
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token/admin")
 
 
 def get_current_user(
