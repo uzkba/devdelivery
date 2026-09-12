@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,15 +19,49 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login/admin", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = db.scalar(select(AdminUser).where(AdminUser.login == payload.login))
+def login(
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    user = autenticar_admin(
+        payload.login,
+        payload.password,
+        db,
+    )
+
+    return gerar_token_admin(user)
+
+
+@router.post("/token/admin", response_model=TokenResponse)
+def login_admin_oauth(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    user = autenticar_admin(
+        form_data.username,
+        form_data.password,
+        db,
+    )
+
+    return gerar_token_admin(user)
+
+@router.get("/me", response_model=AuthenticatedUser)
+def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
+    return current_user
+
+
+def autenticar_admin(login: str, password: str, db: Session) -> AdminUser:
+    user = db.scalar(
+        select(AdminUser).where(AdminUser.login == login)
+    )
+
     credenciais_invalidas = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Login ou senha inválidos.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if user is None or not verify_password(payload.password, user.password_hash):
+    if user is None or not verify_password(password, user.password_hash):
         raise credenciais_invalidas
 
     if not user.is_active:
@@ -35,7 +70,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             detail="Usuário inativo.",
         )
 
+    return user
+
+
+def gerar_token_admin(user: AdminUser) -> TokenResponse:
     expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
     token = create_access_token(
         data={
             "sub": str(user.id),
@@ -43,7 +83,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             "name": user.name,
             "role": user.role,
             "restaurant_id": str(user.restaurant_id),
-            "type": "admin"
+            "type": "admin",
         },
         expires_delta=expires,
     )
@@ -52,8 +92,3 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         access_token=token,
         expires_in=int(expires.total_seconds()),
     )
-
-
-@router.get("/me", response_model=AuthenticatedUser)
-def me(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
-    return current_user
