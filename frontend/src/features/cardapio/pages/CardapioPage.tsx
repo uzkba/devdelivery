@@ -1,22 +1,19 @@
-import { useCardapioHoje } from "../viewmodels/useCardapioHoje";
-import { ItemCardapioCard } from "../components/ItemCardapioCard";
-
-// Camada Page: monta a tela usando o viewmodel + componentes — sem chamar API direto.
 export function CardapioPage() {
-  const { cardapio, carregando, erro } = useCardapioHoje();
+    return (
+        <main className="mx-auto max-w-275">
+        <div className="rounded-xl border border-[#ead8c5] bg-white p-8 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#b08d6e]">
+            Caixa
+            </p>
 
-  if (carregando) return <p className="p-4">Carregando cardápio...</p>;
-  if (erro) return <p className="p-4 text-red-600">{erro}</p>;
-  if (!cardapio || cardapio.itens.length === 0) {
-    return <p className="p-4">Nenhum item disponível no momento.</p>;
-  }
+            <h1 className="mt-2 font-serif text-3xl font-bold text-[#21170f]">
+            Cardápio
+            </h1>
 
-  return (
-    <main className="mx-auto max-w-xl space-y-3 p-4">
-      <h1 className="text-xl font-semibold">Cardápio de hoje</h1>
-      {cardapio.itens.map((item) => (
-        <ItemCardapioCard key={item.id} item={item} onAdicionar={() => {}} />
-      ))}
-    </main>
-  );
+            <p className="mt-3 text-sm text-[#806a57]">
+            Esta área está em construção.
+            </p>
+        </div>
+        </main>
+    );
 }
