@@ -6,67 +6,19 @@ import { usePedidoEmAndamento } from "../../../features/cliente/hooks/usePedidoE
 const TITLES: Record<string, string> = {
     "/": "Seu prato, do seu jeito!",
     "/cardapio": "Monte sua marmita",
-    "/pedido/endereco": "Endereço de entrega",
-    "/pedido/pagamento": "Pagamento",
-    "/pedido/pagamento/pix": "Pagamento via PIX",
-    "/pedido/pagamento/cartao": "Pagamento com cartão",
-    "/pedido/pagamento/dinheiro": "Pagamento em dinheiro",
-    "/pedido/revisao": "Revisar pedido",
-    "/pedido/confirmado": "Pedido confirmado",
+    "/revisao": "Revisar pedido",
+    "/pedido-confirmado": "Pedido confirmado",
     "/pedidos": "Meus pedidos",
     "/conta": "Minha conta",
-    "/conta/enderecos": "Meus endereços",
-    "/conta/login": "Entrar",
+    "/enderecos": "Meus endereços",
 };
 
 const BACK_TARGETS: Record<string, string> = {
-    "/pedido/endereco": "/cardapio",
-    "/pedido/pagamento": "/pedido/endereco",
-    "/pedido/pagamento/pix": "/pedido/pagamento",
-    "/pedido/pagamento/cartao": "/pedido/pagamento",
-    "/pedido/pagamento/dinheiro": "/pedido/pagamento",
-    "/pedido/revisao": "/pedido/pagamento",
-    "/conta/enderecos": "/conta",
-    "/conta/login": "/conta",
+    "/revisao": "/cardapio",
+    "/enderecos": "/conta",
 };
 
-const CHECKOUT_PATHS = [
-    "/pedido/endereco",
-    "/pedido/pagamento",
-    "/pedido/pagamento/pix",
-    "/pedido/pagamento/cartao",
-    "/pedido/pagamento/dinheiro",
-    "/pedido/revisao",
-];
-
-const CHECKOUT_STEPS = [
-    {
-        path: "/pedido/endereco",
-        label: "Endereço",
-        matches: (p: string) => p === "/pedido/endereco",
-    },
-    {
-        path: "/pedido/pagamento",
-        label: "Pagamento",
-        matches: (p: string) => p.startsWith("/pedido/pagamento"),
-    },
-    {
-        path: "/pedido/revisao",
-        label: "Revisão",
-        matches: (p: string) => p === "/pedido/revisao",
-    },
-];
-
-const NO_BOTTOM_NAV = new Set([
-    "/pedido/endereco",
-    "/pedido/pagamento",
-    "/pedido/pagamento/pix",
-    "/pedido/pagamento/cartao",
-    "/pedido/pagamento/dinheiro",
-    "/pedido/revisao",
-    "/pedido/confirmado",
-    "/conta/login",
-]);
+const NO_BOTTOM_NAV = new Set(["/revisao", "/pedido-confirmado"]);
 
 const NAV_ITEMS = [
     { to: "/", icon: Home, label: "Início", exact: true },
@@ -98,8 +50,7 @@ export default function ClientLayout() {
     const backTarget = getBack(path);
 
     const isRoot = path === "/";
-    const isConfirmed = path === "/pedido/confirmado";
-    const isCheckout = CHECKOUT_PATHS.includes(path);
+    const isConfirmed = path === "/pedido-confirmado";
 
     const showBottomNav =
         !NO_BOTTOM_NAV.has(path) && !/^\/pedidos\/.+/.test(path);
@@ -154,8 +105,6 @@ export default function ClientLayout() {
 
                         <div />
                     </div>
-
-                    {isCheckout && <CheckoutSteps currentPath={path} />}
                 </div>
             </header>
 
@@ -247,85 +196,6 @@ export default function ClientLayout() {
                     </div>
                 </nav>
             )}
-        </div>
-    );
-}
-
-function CheckoutSteps({ currentPath }: { currentPath: string }) {
-    const currentIdx = CHECKOUT_STEPS.findIndex((step) =>
-        step.matches(currentPath),
-    );
-
-    return (
-        <div className="flex items-start justify-center px-4 pb-4">
-            {CHECKOUT_STEPS.map((step, idx) => {
-                const done = idx < currentIdx;
-                const active = idx === currentIdx;
-
-                return (
-                    <div key={step.path} className="flex items-start">
-                        <div className="flex flex-col items-center min-w-16">
-                            <div
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-300"
-                                style={{
-                                    background: done
-                                        ? "#16A34A"
-                                        : active
-                                            ? "#F97316"
-                                            : "rgba(255,255,255,0.12)",
-                                    color:
-                                        done || active
-                                            ? "#fff"
-                                            : "rgba(255,255,255,0.4)",
-                                    boxShadow: active
-                                        ? "0 0 0 3px rgba(249,115,22,0.15)"
-                                        : "none",
-                                }}
-                            >
-                                {done ? (
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        className="w-3.5 h-3.5"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="3"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <path d="M20 6L9 17l-5-5" />
-                                    </svg>
-                                ) : (
-                                    idx + 1
-                                )}
-                            </div>
-
-                            <span
-                                className="mt-1 text-[10px] font-semibold"
-                                style={{
-                                    color: active
-                                        ? "#FDE68A"
-                                        : done
-                                            ? "#86EFAC"
-                                            : "rgba(255,255,255,0.4)",
-                                }}
-                            >
-                                {step.label}
-                            </span>
-                        </div>
-
-                        {idx < CHECKOUT_STEPS.length - 1 && (
-                            <div
-                                className="w-12 h-px mt-3"
-                                style={{
-                                    background: done
-                                        ? "#16A34A"
-                                        : "rgba(255,255,255,0.14)",
-                                }}
-                            />
-                        )}
-                    </div>
-                );
-            })}
         </div>
     );
 }

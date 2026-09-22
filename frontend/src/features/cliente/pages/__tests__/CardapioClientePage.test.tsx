@@ -1,32 +1,65 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { useCardapioDoDia } from "@/features/cardapio/hooks/useCardapioDoDia";
-import { useCardapioCarrinho } from "@/features/cardapio/viewmodels/useCardapioCarrinho";
-import CardapioClientePage from "../CardapioClientePage";
 
 const mockNavigate = vi.fn();
-
-vi.mock("react-router-dom", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("react-router-dom")>();
+vi.mock("react-router-dom", async () => {
+    const actual = await vi.importActual("react-router-dom");
     return { ...actual, useNavigate: () => mockNavigate };
 });
 
+const mockUseCardapioDoDia = vi.fn();
 vi.mock("@/features/cardapio/hooks/useCardapioDoDia", () => ({
-    useCardapioDoDia: vi.fn(),
+    useCardapioDoDia: () => mockUseCardapioDoDia(),
 }));
 
-vi.mock("@/features/cardapio/viewmodels/useCardapioCarrinho", () => ({
-    useCardapioCarrinho: vi.fn(),
+const mockUseCarrinho = vi.fn();
+vi.mock("@/features/pedido/contexts/CarrinhoContexts", () => ({
+    useCarrinho: () => mockUseCarrinho(),
 }));
 
-const CARRINHO_VAZIO = {
-    quantidades: {},
-    definirQuantidade: vi.fn(),
-    itensCarrinho: [],
-    totalItens: 0,
-    subtotal: 0,
-    total: 0,
+vi.mock("@/features/cardapio/utils/corPorCategoria", () => ({
+    corDaCategoria: () => "#F97316",
+}));
+
+vi.mock("@/features/cardapio/components/CardapioItemCard", () => ({
+    default: (props: any) => (
+        <div>
+            <span>{props.nome}</span>
+            <span data-testid={`qtd-${props.nome}`}>{props.quantidade}</span>
+            <button onClick={props.onIncrementar}>+ {props.nome}</button>
+            <button onClick={props.onDecrementar}>- {props.nome}</button>
+        </div>
+    ),
+}));
+
+vi.mock("@/features/cardapio/components/CardapioSkeleton", () => ({
+    default: () => <div>carregando cardápio...</div>,
+}));
+
+vi.mock("@/features/cardapio/components/CardapioVazio", () => ({
+    default: () => <div>nenhum cardápio disponível hoje</div>,
+}));
+
+import CardapioClientePage from "../CardapioClientePage";
+
+const CARDAPIO_MOCK = {
+    data: "2026-09-15",
+    categorias: [
+        {
+            categoriaId: "cat-1",
+            categoriaNome: "Arroz",
+            itens: [
+                {
+                    itemId: "item-1",
+                    nome: "Arroz Branco",
+                    descricao: "",
+                    preco: 8,
+                },
+            ],
+        },
+    ],
 };
 
 function renderPagina() {
@@ -39,167 +72,107 @@ function renderPagina() {
 
 describe("CardapioClientePage", () => {
     beforeEach(() => {
-        mockNavigate.mockReset();
-        vi.mocked(useCardapioCarrinho).mockReturnValue(CARRINHO_VAZIO);
+        mockNavigate.mockClear();
+        mockUseCarrinho.mockReturnValue({
+            getQuantidade: () => 0,
+            definirQuantidade: vi.fn(),
+            totalItens: 0,
+        });
     });
 
     it("mostra o skeleton enquanto carrega", () => {
-        vi.mocked(useCardapioDoDia).mockReturnValue({
+        mockUseCardapioDoDia.mockReturnValue({
             cardapio: null,
             carregando: true,
             erro: null,
             recarregar: vi.fn(),
         });
-
-        const { container } = renderPagina();
-        expect(container.querySelector(".animate-pulse")).not.toBeNull();
+        renderPagina();
+        expect(screen.getByText("carregando cardápio...")).toBeInTheDocument();
     });
 
-    it("mostra a mensagem de erro com botão de tentar novamente", () => {
+    it("mostra erro com botão de tentar novamente", async () => {
         const recarregar = vi.fn();
-        vi.mocked(useCardapioDoDia).mockReturnValue({
+        mockUseCardapioDoDia.mockReturnValue({
             cardapio: null,
             carregando: false,
-            erro: "Não foi possível carregar o cardápio de hoje. Tente novamente.",
+            erro: "Falha ao carregar",
             recarregar,
         });
-
         renderPagina();
 
-        expect(
-            screen.getByText(
-                "Não foi possível carregar o cardápio de hoje. Tente novamente.",
-            ),
-        ).toBeInTheDocument();
-        fireEvent.click(screen.getByText("Tentar novamente"));
-        expect(recarregar).toHaveBeenCalledTimes(1);
+        expect(screen.getByText("Falha ao carregar")).toBeInTheDocument();
+        await userEvent.setup().click(screen.getByText("Tentar novamente"));
+        expect(recarregar).toHaveBeenCalled();
     });
 
-    it("mostra o estado vazio quando não há categorias", () => {
-        vi.mocked(useCardapioDoDia).mockReturnValue({
-            cardapio: { data: "2026-09-12", categorias: [] },
+    it("mostra estado vazio quando não há categorias", () => {
+        mockUseCardapioDoDia.mockReturnValue({
+            cardapio: { data: "2026-09-15", categorias: [] },
             carregando: false,
             erro: null,
             recarregar: vi.fn(),
         });
-
         renderPagina();
-
         expect(
-            screen.getByText("Nenhum cardápio disponível hoje"),
+            screen.getByText("nenhum cardápio disponível hoje"),
         ).toBeInTheDocument();
     });
 
-    it("renderiza as categorias e itens do cardápio", () => {
-        vi.mocked(useCardapioDoDia).mockReturnValue({
-            cardapio: {
-                data: "2026-09-12",
-                categorias: [
-                    {
-                        categoriaId: "cat-1",
-                        categoriaNome: "Carnes",
-                        itens: [
-                            {
-                                itemId: "item-1",
-                                alimentoId: "a-1",
-                                nome: "Bife",
-                                descricao: null,
-                                preco: 18.5,
-                                gruposComplemento: [],
-                            },
-                        ],
-                    },
-                ],
-            },
+    it("renderiza os itens e mantém o botão desabilitado sem seleção", () => {
+        mockUseCardapioDoDia.mockReturnValue({
+            cardapio: CARDAPIO_MOCK,
             carregando: false,
             erro: null,
             recarregar: vi.fn(),
         });
-
         renderPagina();
 
-        expect(screen.getAllByText("Carnes").length).toBeGreaterThan(0);
-        expect(screen.getByText("Bife")).toBeInTheDocument();
+        expect(screen.getByText("Arroz Branco")).toBeInTheDocument();
+        expect(screen.getByText("Selecione ao menos um item")).toBeDisabled();
     });
 
-    it("não mostra o resumo/CTA quando o carrinho está vazio", () => {
-        vi.mocked(useCardapioDoDia).mockReturnValue({
-            cardapio: {
-                data: "2026-09-12",
-                categorias: [
-                    {
-                        categoriaId: "cat-1",
-                        categoriaNome: "Carnes",
-                        itens: [
-                            {
-                                itemId: "item-1",
-                                alimentoId: "a-1",
-                                nome: "Bife",
-                                descricao: null,
-                                preco: 18.5,
-                                gruposComplemento: [],
-                            },
-                        ],
-                    },
-                ],
-            },
+    it("habilita o botão e navega pra /revisao com itens selecionados", async () => {
+        mockUseCardapioDoDia.mockReturnValue({
+            cardapio: CARDAPIO_MOCK,
             carregando: false,
             erro: null,
             recarregar: vi.fn(),
         });
-
+        mockUseCarrinho.mockReturnValue({
+            getQuantidade: () => 1,
+            definirQuantidade: vi.fn(),
+            totalItens: 1,
+        });
         renderPagina();
 
-        expect(
-            screen.getByText(
-                "Toque em um alimento para adicioná-lo ao pedido.",
-            ),
-        ).toBeInTheDocument();
-        expect(screen.queryByText("Continuar")).not.toBeInTheDocument();
+        const botao = screen.getByText("Continuar · 1 item");
+        expect(botao).toBeEnabled();
+
+        await userEvent.setup().click(botao);
+        expect(mockNavigate).toHaveBeenCalledWith("/revisao");
     });
 
-    it("mostra o resumo e navega pro checkout com os itens do carrinho ao clicar em Continuar", () => {
-        vi.mocked(useCardapioDoDia).mockReturnValue({
-            cardapio: {
-                data: "2026-09-12",
-                categorias: [
-                    {
-                        categoriaId: "cat-1",
-                        categoriaNome: "Carnes",
-                        itens: [
-                            {
-                                itemId: "item-1",
-                                alimentoId: "a-1",
-                                nome: "Bife",
-                                descricao: null,
-                                preco: 18.5,
-                                gruposComplemento: [],
-                            },
-                        ],
-                    },
-                ],
-            },
+    it("clicar em + chama definirQuantidade com o item e a quantidade incrementada", async () => {
+        const definirQuantidade = vi.fn();
+        mockUseCardapioDoDia.mockReturnValue({
+            cardapio: CARDAPIO_MOCK,
             carregando: false,
             erro: null,
             recarregar: vi.fn(),
         });
-
-        const itensCarrinho = [
-            { id: "item-1", nome: "Bife", preco: 18.5, quantidade: 2 },
-        ];
-        vi.mocked(useCardapioCarrinho).mockReturnValue({
-            ...CARRINHO_VAZIO,
-            itensCarrinho,
-            totalItens: 2,
-            total: 42,
+        mockUseCarrinho.mockReturnValue({
+            getQuantidade: () => 0,
+            definirQuantidade,
+            totalItens: 0,
         });
-
         renderPagina();
 
-        fireEvent.click(screen.getByText("Continuar"));
+        await userEvent.setup().click(screen.getByText("+ Arroz Branco"));
 
-        expect(mockNavigate).toHaveBeenCalledWith("/pedido/endereco", {
-            state: { cartItems: itensCarrinho },
-        });
+        expect(definirQuantidade).toHaveBeenCalledWith(
+            { id: "item-1", name: "Arroz Branco", catName: "Arroz", price: 8 },
+            1,
+        );
     });
 });

@@ -22,11 +22,12 @@ function renderComLayout(initialPath: string) {
                 <Route element={<ClientLayout />}>
                     <Route path="/" element={<div>Conteúdo Início</div>} />
                     <Route path="/cardapio" element={<div>Conteúdo Cardápio</div>} />
-                    <Route path="/pedido/endereco" element={<div>Conteúdo Endereço</div>} />
-                    <Route path="/pedido/pagamento" element={<div>Conteúdo Pagamento</div>} />
+                    <Route path="/revisao" element={<div>Conteúdo Revisão</div>} />
+                    <Route path="/pedido-confirmado" element={<div>Conteúdo Confirmado</div>} />
                     <Route path="/pedidos" element={<div>Conteúdo Pedidos</div>} />
                     <Route path="/pedidos/:id" element={<div>Conteúdo Detalhe do Pedido</div>} />
                     <Route path="/conta" element={<div>Conteúdo Conta</div>} />
+                    <Route path="/enderecos" element={<div>Conteúdo Endereços</div>} />
                 </Route>
             </Routes>
         </MemoryRouter>,
@@ -43,6 +44,11 @@ describe("ClientLayout", () => {
     it('mostra o título correto pra rota atual', () => {
         renderComLayout("/cardapio");
         expect(screen.getByRole("heading", { name: "Monte sua marmita" })).toBeInTheDocument();
+    });
+
+    it('mostra o título "Revisar pedido" na tela de revisão', () => {
+        renderComLayout("/revisao");
+        expect(screen.getByRole("heading", { name: "Revisar pedido" })).toBeInTheDocument();
     });
 
     it("mostra o nome do restaurante vindo da API na tela inicial", () => {
@@ -76,12 +82,30 @@ describe("ClientLayout", () => {
         expect(screen.getByText("Conteúdo Pedidos")).toBeInTheDocument();
     });
 
-    it("esconde a navegação inferior durante o checkout", () => {
-        renderComLayout("/pedido/endereco");
+    it("na revisão, o botão Voltar aponta pra /cardapio", () => {
+        renderComLayout("/revisao");
+        fireEvent.click(screen.getByText("Voltar"));
+        expect(screen.getByText("Conteúdo Cardápio")).toBeInTheDocument();
+    });
+
+    it("em endereços, o botão Voltar aponta pra /conta", () => {
+        renderComLayout("/enderecos");
+        fireEvent.click(screen.getByText("Voltar"));
+        expect(screen.getByText("Conteúdo Conta")).toBeInTheDocument();
+    });
+
+    it("esconde a navegação inferior na tela de revisão", () => {
+        renderComLayout("/revisao");
         expect(screen.queryByText("Início")).not.toBeInTheDocument();
     });
 
-    it("mostra a navegação inferior fora do checkout", () => {
+    it("esconde a navegação inferior e o botão Voltar na tela de pedido confirmado", () => {
+        renderComLayout("/pedido-confirmado");
+        expect(screen.queryByText("Início")).not.toBeInTheDocument();
+        expect(screen.queryByText("Voltar")).not.toBeInTheDocument();
+    });
+
+    it("mostra a navegação inferior fora das rotas sem bottom nav", () => {
         renderComLayout("/cardapio");
         expect(screen.getByText("Início")).toBeInTheDocument();
         expect(screen.getByText("Cardápio")).toBeInTheDocument();
@@ -89,16 +113,10 @@ describe("ClientLayout", () => {
         expect(screen.getByText("Conta")).toBeInTheDocument();
     });
 
-    it("mostra os passos do checkout nas rotas de checkout", () => {
-        renderComLayout("/pedido/endereco");
-        expect(screen.getByText("Endereço")).toBeInTheDocument();
-        expect(screen.getByText("Pagamento")).toBeInTheDocument();
-        expect(screen.getByText("Revisão")).toBeInTheDocument();
-    });
-
-    it("não mostra os passos do checkout fora do fluxo de checkout", () => {
-        renderComLayout("/cardapio");
-        expect(screen.queryByText("Revisão")).not.toBeInTheDocument();
+    it("não mostra mais nenhum indicador de passos de checkout", () => {
+        renderComLayout("/revisao");
+        expect(screen.queryByText("Endereço")).not.toBeInTheDocument();
+        expect(screen.queryByText("Pagamento")).not.toBeInTheDocument();
     });
 
     it("renderiza o conteúdo da rota filha via Outlet", () => {
