@@ -5,16 +5,39 @@ from typing import List, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ClientSummaryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nome: str = Field(validation_alias="name")
+    telefone: str = Field(validation_alias="phone")
+
+
+class OrderStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    codigo: str = Field(validation_alias="code")
+    nome: str = Field(validation_alias="name")
+    pago: bool = Field(validation_alias="is_paid")
+    final: bool = Field(validation_alias="is_final")
+
+
+class PaymentMethodOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    codigo: str = Field(validation_alias="code")
+    nome: str = Field(validation_alias="name")
+
+
 class OrderItemOptionCreate(BaseModel):
     opcao_complemento_id: uuid.UUID
     quantidade: int = Field(default=1, gt=0)
+
 
 class OrderItemCreate(BaseModel):
     alimento_id: uuid.UUID
     quantidade: int = Field(default=1, gt=0)
     observacoes: Optional[str] = None
     opcoes_selecionadas: List[OrderItemOptionCreate] = []
-    
+
+
 class OrderCreate(BaseModel):
     restaurante_id: uuid.UUID
     endereco_id: uuid.UUID
@@ -23,13 +46,15 @@ class OrderCreate(BaseModel):
     itens: List[OrderItemCreate] = Field(..., min_length=1)
     observacoes: Optional[str] = None
 
+
 class OrderItemOptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     opcao_complemento_id: Optional[uuid.UUID] = Field(validation_alias="modifier_option_id")
     nome_opcao: str = Field(validation_alias="option_name")
     preco_adicional_unitario: Decimal = Field(validation_alias="extra_price")
-    quantidade: int = Field(validation_alias="quantity")  
+    quantidade: int = Field(validation_alias="quantity")
+
 
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -42,19 +67,15 @@ class OrderItemOut(BaseModel):
     observacoes: Optional[str] = Field(default=None, validation_alias="notes")
     opcoes_selecionadas: List[OrderItemOptionOut] = Field(default=[], validation_alias="selected_options")
 
-class ClienteResumoOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    nome: str = Field(validation_alias="name")
-    telefone: str = Field(validation_alias="phone")
 
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
     cliente_id: uuid.UUID = Field(validation_alias="client_id")
-    cliente: ClienteResumoOut = Field(validation_alias="client")
-    status_id: uuid.UUID = Field(validation_alias="status_id")
+    cliente: ClientSummaryOut = Field(validation_alias="client")
+    status: OrderStatusOut
+    forma_pagamento: PaymentMethodOut = Field(validation_alias="payment_method")
     data_hora: datetime = Field(validation_alias="order_datetime")
 
     endereco_rua: str = Field(validation_alias="address_street")
@@ -68,14 +89,9 @@ class OrderOut(BaseModel):
 
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
-class OrderStatusOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    code: str
-    name: str
-    is_final: bool
 
 class OrderListItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True) 
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
     cliente_id: uuid.UUID = Field(validation_alias="client_id")
@@ -83,11 +99,12 @@ class OrderListItemOut(BaseModel):
     status: OrderStatusOut
     data_hora: datetime = Field(validation_alias="order_datetime")
     valor_total: Decimal = Field(validation_alias="total_amount")
-
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
+
 
 class OrderStatusUpdate(BaseModel):
     novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
+
 
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]

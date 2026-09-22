@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import EnderecosPage from "../EnderecosPage";
 import { useEnderecos } from "../../hooks/useEnderecos";
+import { buscarCoordenadasPorEndereco } from "@/features/cliente/services/geocodingService";
 
 vi.mock("../../hooks/useEnderecos");
+vi.mock("@/features/cliente/services/geocodingService");
 
 const baseEndereco = {
     id: "1",
@@ -34,7 +36,13 @@ function mockHook(overrides = {}) {
 }
 
 describe("EnderecosPage", () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(buscarCoordenadasPorEndereco).mockResolvedValue({
+            latitude: -7.3196,
+            longitude: -35.1119,
+        });
+    });
 
     it("mostra o estado de carregamento", () => {
         mockHook({ loading: true });
@@ -121,7 +129,11 @@ describe("EnderecosPage", () => {
             target: { value: "Bairro Novo" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+
+        // handleSubmit agora é assíncrono (passa pelo geocoding
+        // antes de chamar onSubmit quando não há lat/long capturada)
         await waitFor(() => expect(adicionar).toHaveBeenCalled());
+
         expect(
             await screen.findByText("Endereço adicionado com sucesso!"),
         ).toBeInTheDocument();

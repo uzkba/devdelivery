@@ -2,7 +2,10 @@ import pytest
 from datetime import date
 from decimal import Decimal
 
-from app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem, DeliveryRule
+from app.model.models import (
+    AuditLog, Food, FoodCategory, Menu, MenuItem,
+    RestaurantDeliverySettings, DeliveryChargeMode,
+)
 
 
 @pytest.fixture()
@@ -12,6 +15,17 @@ def categoria(db, restaurante):
     db.flush()
     db.refresh(c)
     return c
+
+
+@pytest.fixture()
+def config_entrega_gratis(db, restaurante):
+    config = RestaurantDeliverySettings(
+        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.GRATIS, min_order_value=None,
+    )
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return config
 
 
 def criar_alimento_direto(db, categoria, **overrides):
@@ -51,7 +65,7 @@ def criar_item_cardapio(db, menu, alimento, is_available=True, day_price=None):
 
 def test_criar_pedido_gera_log_auditoria(
     db, client, restaurante, categoria, cliente, endereco, token_para_cliente,
-    forma_pagamento_dinheiro,
+    forma_pagamento_dinheiro, config_entrega_gratis,
 ):
     alimento = criar_alimento_direto(db, categoria, name="Feijoada", base_price=Decimal("15.00"))
     menu = criar_cardapio(db, restaurante)
@@ -65,15 +79,7 @@ def test_criar_pedido_gera_log_auditoria(
         "valor_pago_dinheiro": "30.00",
         "itens": [{"alimento_id": str(alimento.id), "quantidade": 2, "opcoes_selecionadas": []}],
     }
-    regra = DeliveryRule(
-    restaurant_id=restaurante.id,
-    min_distance_km=Decimal("0.0"),
-    max_distance_km=Decimal("10.0"),
-    fee=Decimal("0.00"),
-    is_active=True
-)
-    db.add(regra)
-    db.commit()
+
     resposta = client.post(
         "/pedidos", json=payload, headers={"Authorization": f"Bearer {token}"}
     )

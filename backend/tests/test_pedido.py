@@ -11,9 +11,13 @@ from app.model.models import (
     DeliveryRule,
     ModifierGroup,
     ModifierOption,
-    CustomerAddress
+    CustomerAddress,
+    RestaurantDeliverySettings,
+    DeliveryRuleNeighborhood,
+    DeliveryChargeMode
 )
 from app.core.seguranca import hash_password
+from tests.conftest import status_criado
 
 
 # ── fixtures/helpers locais ──
@@ -27,19 +31,44 @@ def categoria(db, restaurante):
     return c
 
 
-@pytest.fixture()
-def regra_frete_basica(db, restaurante):
-    """Regra de frete genérica de 0 a 10km para os testes básicos passarem na validação geográfica"""
-    regra = DeliveryRule(
-        restaurant_id=restaurante.id,
-        min_distance_km=Decimal("0.0"),
-        max_distance_km=Decimal("10.0"),
-        fee=Decimal("0.00"),
-        is_active=True
+@pytest.fixture
+def config_entrega_gratis(db, restaurante):
+    config = RestaurantDeliverySettings(
+        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.GRATIS, min_order_value=None,
     )
-    db.add(regra)
-    db.flush()
-    return regra
+    db.add(config); db.commit(); db.refresh(config)
+    return config
+
+
+@pytest.fixture
+def config_entrega_fixo(db, restaurante):
+    config = RestaurantDeliverySettings(
+        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.FIXO,
+        fixed_fee=7.50, min_order_value=20,
+    )
+    db.add(config); db.commit(); db.refresh(config)
+    return config
+
+
+@pytest.fixture
+def config_entrega_bairro(db, restaurante):
+    config = RestaurantDeliverySettings(
+        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.BAIRRO, min_order_value=None,
+    )
+    db.add(config); db.flush()
+    db.add(DeliveryRuleNeighborhood(restaurant_id=restaurante.id, neighborhood="Centro", fee=6.00))
+    db.commit(); db.refresh(config)
+    return config
+
+
+def _payload_pedido(endereco_id, restaurante_id, alimento_id, quantidade=1):
+    return {
+        "restaurante_id": str(restaurante_id),
+        "endereco_id": str(endereco_id),
+        "forma_pagamento": "DINHEIRO",
+        "valor_pago_dinheiro": "100.00",
+        "itens": [{"alimento_id": str(alimento_id), "quantidade": quantidade}],
+    }
 
 
 def criar_alimento_direto(db, categoria, **overrides):
@@ -87,7 +116,7 @@ def payload_pedido(restaurante, endereco, alimento, **overrides):
 
 # ── criação de pedido ──────────────────────────────────────────────
 
-def test_cliente_cria_pedido_com_sucesso(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_cliente_cria_pedido_com_sucesso(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria, base_price=Decimal("15.00"))
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
@@ -110,7 +139,7 @@ def test_cliente_cria_pedido_com_sucesso(db, client, restaurante, cliente, ender
     assert len(corpo["itens"]) == 1
 
 
-def test_pedido_usa_preco_do_dia_quando_setado(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_pedido_usa_preco_do_dia_quando_setado(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria, base_price=Decimal("20.00"))
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento, day_price=Decimal("12.50"))
@@ -128,7 +157,7 @@ def test_pedido_usa_preco_do_dia_quando_setado(db, client, restaurante, cliente,
     assert resp.json()["valor_itens"] == "12.50"
 
 
-def test_pedido_rejeita_item_fora_do_cardapio_de_hoje(db, client, restaurante, cliente, endereco, categoria, token_para_cliente):
+def test_pedido_rejeita_item_fora_do_cardapio_de_hoje(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria)
 
     resp = client.post(
@@ -140,7 +169,7 @@ def test_pedido_rejeita_item_fora_do_cardapio_de_hoje(db, client, restaurante, c
     assert resp.status_code == 422
 
 
-def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente, endereco, categoria, token_para_cliente):
+def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria)
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento, is_available=False)
@@ -194,7 +223,7 @@ def test_pedido_com_token_de_admin_retorna_401(db, client, restaurante, cliente,
 
 # ── forma de pagamento / troco ──────────────────────────────────────
 
-def test_dinheiro_sem_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_dinheiro_sem_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria)
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
@@ -207,7 +236,7 @@ def test_dinheiro_sem_valor_pago_retorna_422(db, client, restaurante, cliente, e
     assert resp.status_code == 422
 
 
-def test_dinheiro_com_valor_menor_que_total_retorna_400(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_dinheiro_com_valor_menor_que_total_retorna_400(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria, base_price=Decimal("10.00"))
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
@@ -224,7 +253,7 @@ def test_dinheiro_com_valor_menor_que_total_retorna_400(db, client, restaurante,
     assert resp.status_code == 400
 
 
-def test_dinheiro_calcula_troco_corretamente(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_dinheiro_calcula_troco_corretamente(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria, base_price=Decimal("10.00"))
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
@@ -246,7 +275,7 @@ def test_dinheiro_calcula_troco_corretamente(db, client, restaurante, cliente, e
     assert resp.json()["valor_troco"] == "10.00"
 
 
-def test_pix_com_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, regra_frete_basica, token_para_cliente):
+def test_pix_com_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
     alimento = criar_alimento_direto(db, categoria)
     menu = criar_cardapio_hoje(db, restaurante)
     criar_item_cardapio(db, menu, alimento)
@@ -302,14 +331,22 @@ def test_login_cliente_senha_errada_retorna_401(db, client):
 @pytest.fixture
 def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_pagamento_dinheiro):
     """
-    Prepara o ecossistema necessário para um pedido:
-    Coordenadas, Regra de Entrega, Cardápio de Hoje e Complementos.
+    Prepara o ecossistema necessário para um pedido com frete por distância:
+    Coordenadas, Configuração de Entrega (modo DISTANCIA), Regra de Entrega,
+    Cardápio de Hoje e Complementos.
     """
     restaurante.latitude = Decimal("-23.550520")
     restaurante.longitude = Decimal("-46.633308")
 
     endereco.latitude = Decimal("-23.555000")
     endereco.longitude = Decimal("-46.635000")
+
+    config_entrega = RestaurantDeliverySettings(
+        restaurant_id=restaurante.id,
+        charge_mode=DeliveryChargeMode.DISTANCIA,
+        min_order_value=None,
+    )
+    db.add(config_entrega)
 
     regra_frete = DeliveryRule(
         restaurant_id=restaurante.id,
@@ -368,11 +405,12 @@ def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_
     return {
         "alimento": hamburguer,
         "opcao": bacon,
-        "regra_frete": regra_frete
+        "regra_frete": regra_frete,
+        "config_entrega": config_entrega,
     }
 
 
-def test_criar_pedido_com_sucesso(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente):
+def test_criar_pedido_com_sucesso(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
     token = token_para_cliente(cliente)
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -406,7 +444,7 @@ def test_criar_pedido_com_sucesso(client, db, cenario_checkout, restaurante, cli
     assert response.status_code == 201
     dados = response.json()
 
-    assert dados["status_id"] is not None
+    assert dados["status"]["codigo"] == status_criado.code
     assert dados["cliente_id"] == str(cliente.id)
     assert dados["valor_itens"] == "54.00"
     assert dados["valor_entrega"] == "7.50"
