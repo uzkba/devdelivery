@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,6 +9,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Enum,
     ForeignKey,
     Identity,
     Index,
@@ -273,6 +275,8 @@ class Order(Base):
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     status_history: Mapped[list["OrderStatusHistory"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     client: Mapped["Client"] = relationship(lazy="joined")
+    status: Mapped["OrderStatus"] = relationship(lazy="joined")
+    payment_method: Mapped["PaymentMethod"] = relationship(lazy="joined")
 
 
     __table_args__ = (
@@ -373,9 +377,9 @@ class DeliveryRule(Base):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4)
     restaurant_id = Column(UUID, ForeignKey("restaurante.id"), nullable=False)
-    min_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 0.00
-    max_distance_km = Column(Numeric(5, 2), nullable=False) # Ex: 3.00
-    fee = Column(Numeric(10, 2), nullable=False)            # Ex: 5.00
+    min_distance_km = Column(Numeric(5, 2), nullable=False) 
+    max_distance_km = Column(Numeric(5, 2), nullable=False) 
+    fee = Column(Numeric(10, 2), nullable=False)            
     is_active = Column(Boolean, default=True)
 
 
@@ -389,3 +393,40 @@ class ReceivingAccount(Base):
     city: Mapped[str] = mapped_column("cidade", String(60), nullable=False)
     active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DeliveryChargeMode(str, enum.Enum):
+    GRATIS = "GRATIS"
+    FIXO = "FIXO"
+    BAIRRO = "BAIRRO"
+    DISTANCIA = "DISTANCIA"
+
+
+class RestaurantDeliverySettings(Base):
+    __tablename__ = "configuracao_entrega"
+
+    id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    restaurant_id = mapped_column("restaurante_id", UUID(as_uuid=True), ForeignKey("restaurante.id"), unique=True, nullable=False)
+
+    delivery_enabled = mapped_column("entrega_ativa", Boolean, default=True, nullable=False)
+    pickup_enabled = mapped_column("retirada_ativa", Boolean, default=True, nullable=False)
+
+    min_order_value = mapped_column("valor_minimo", Numeric(10, 2), nullable=True)
+    delivery_time_minutes = mapped_column("tempo_entrega_min", Integer, nullable=True)
+    pickup_time_minutes = mapped_column("tempo_retirada_min", Integer, nullable=True)
+
+    charge_mode = mapped_column("modo_cobranca", Enum(DeliveryChargeMode, name="modo_cobranca_entrega"), nullable=False)
+    fixed_fee = mapped_column("taxa_fixa", Numeric(10, 2), nullable=True)  # só usado quando charge_mode == FIXO
+
+    created_at = mapped_column("criado_em", DateTime(timezone=True), server_default=func.now())
+    updated_at = mapped_column("atualizado_em", DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DeliveryRuleNeighborhood(Base):
+    __tablename__ = "regra_entrega_bairro"
+
+    id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    restaurant_id = mapped_column(UUID(as_uuid=True), ForeignKey("restaurante.id"), nullable=False)
+    neighborhood = mapped_column("bairro", String(120), nullable=False)
+    fee = mapped_column("taxa", Numeric(10, 2), nullable=False)
+    is_active = mapped_column("ativo", Boolean, default=True, nullable=False)
