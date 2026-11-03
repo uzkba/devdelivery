@@ -1,17 +1,25 @@
 import uuid
+from typing import Optional
+
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
+
 from app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
-from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate
+from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate, validar_regras_avulso
 from app.services.auditoria_service import (
     registrar_log_auditoria, serializar_entidade, ACAO_CRIACAO, ACAO_EDICAO, ACAO_EXCLUSAO,
 )
 
 
-def _get_categoria_ou_404(db: Session, categoria_id: uuid.UUID, restaurant_id: uuid.UUID) -> FoodCategory:
+def _get_categoria_ou_404(
+    db: Session, categoria_id: uuid.UUID, restaurant_id: uuid.UUID, tipo: Optional[str] = None
+) -> FoodCategory:
+    """404 se não existe/é de outro restaurante; 422 se o tipo não bate."""
     categoria = db.query(FoodCategory).filter_by(id=categoria_id, restaurant_id=restaurant_id).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="Categoria não encontrada para este restaurante")
+    if tipo and categoria.type != tipo:
+        raise HTTPException(status_code=422, detail=f"A categoria informada deve ser do tipo '{tipo}'.")
     return categoria
 
 
@@ -28,7 +36,12 @@ def get_alimento_por_id(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid
 
 
 def listar_alimentos(
-    db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.UUID = None, incluir_inativos: bool = False
+    db: Session,
+    restaurant_id: uuid.UUID,
+    categoria_id: Optional[uuid.UUID] = None,
+    incluir_inativos: bool = False,
+    vendavel_avulso: Optional[bool] = None,
+    categoria_venda_id: Optional[uuid.UUID] = None,
 ):
     query = (
         db.query(Food)
@@ -39,20 +52,34 @@ def listar_alimentos(
         query = query.filter(Food.is_active.is_(True), Food.is_available.is_(True))
     if categoria_id:
         query = query.filter(Food.category_id == categoria_id)
+    if vendavel_avulso is not None:
+        query = query.filter(Food.is_sellable_alone.is_(vendavel_avulso))
+    if categoria_venda_id:
+        query = query.filter(Food.sale_category_id == categoria_venda_id)
     return query.all()
 
 
 def criar_alimento(
     db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
 ) -> Food:
-    _get_categoria_ou_404(db, payload.categoria_id, restaurant_id)
+    if payload.categoria_id:
+        _get_categoria_ou_404(db, payload.categoria_id, restaurant_id, tipo="composicao")
+    if payload.categoria_venda_id:
+        _get_categoria_ou_404(db, payload.categoria_venda_id, restaurant_id, tipo="venda")
 
     novo = Food(
         restaurant_id=restaurant_id,
-        category_id=payload.categoria_id,
         name=payload.nome,
         description=payload.descricao,
         base_price=payload.preco_base,
+        # category_id é o espelho legado; composition_category_id é explícito porque
+        # o listener do models.py não atua quando há categoria de venda definida.
+        category_id=payload.categoria_id,
+        composition_category_id=payload.categoria_id,
+        sale_category_id=payload.categoria_venda_id,
+        is_sellable_alone=payload.vendavel_avulso,
+        standalone_price=payload.preco_avulso,
+        is_featured=payload.destaque,
     )
     db.add(novo)
     db.flush()
@@ -63,7 +90,7 @@ def criar_alimento(
                 food_id=novo.id,
                 name=g_data.nome,
                 min_choices=g_data.escolhas_minimas,
-                max_choices=g_data.escolhas_maximas
+                max_choices=g_data.escolhas_maximas,
             )
             db.add(grupo)
             db.flush()
@@ -73,7 +100,7 @@ def criar_alimento(
                     group_id=grupo.id,
                     name=o_data.nome,
                     extra_price=o_data.preco_adicional,
-                    is_available=o_data.disponivel
+                    is_available=o_data.disponivel,
                 )
                 db.add(opcao)
 
@@ -101,16 +128,46 @@ def atualizar_alimento(
     if not dados:
         return alimento
 
+    # só valida o tipo das categorias que vieram no payload (não bloqueia legado)
+    if dados.get("categoria_id"):
+        _get_categoria_ou_404(db, dados["categoria_id"], restaurant_id, tipo="composicao")
+    if dados.get("categoria_venda_id"):
+        _get_categoria_ou_404(db, dados["categoria_venda_id"], restaurant_id, tipo="venda")
+
+    # desligar o avulso sem mandar os outros campos limpa preço e categoria de venda
+    if dados.get("vendavel_avulso") is False:
+        dados.setdefault("preco_avulso", None)
+        dados.setdefault("categoria_venda_id", None)
+
+    # valida o ESTADO FINAL (valores atuais + patch)
+    try:
+        validar_regras_avulso(
+            dados.get("vendavel_avulso", alimento.is_sellable_alone),
+            dados.get("preco_avulso", alimento.standalone_price),
+            dados.get("categoria_venda_id", alimento.sale_category_id),
+            dados.get("categoria_id", alimento.category_id),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     dados_anteriores = serializar_entidade(alimento, "alimento")
 
     if "categoria_id" in dados:
-        _get_categoria_ou_404(db, dados["categoria_id"], restaurant_id)
         alimento.category_id = dados["categoria_id"]
+        alimento.composition_category_id = dados["categoria_id"]
+    if "categoria_venda_id" in dados:
+        alimento.sale_category_id = dados["categoria_venda_id"]
+    if "vendavel_avulso" in dados:
+        alimento.is_sellable_alone = dados["vendavel_avulso"]
+    if "preco_avulso" in dados:
+        alimento.standalone_price = dados["preco_avulso"]
+    if "destaque" in dados and dados["destaque"] is not None:
+        alimento.is_featured = dados["destaque"]
     if "nome" in dados:
         alimento.name = dados["nome"]
     if "descricao" in dados:
         alimento.description = dados["descricao"]
-    if "preco_base" in dados:
+    if "preco_base" in dados and dados["preco_base"] is not None:
         alimento.base_price = dados["preco_base"]
 
     registrar_log_auditoria(

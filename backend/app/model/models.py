@@ -269,18 +269,6 @@ class FoodCategory(Base):
 
 
 class Food(Base):
-    """Alimento com dupla natureza:
-    - categoria_composicao_id: pode entrar em marmitas (via categoria) e combos;
-    - categoria_venda_id + vendavel_avulso + preco_avulso: tambem e vendido avulso.
-    Acompanhamento/bebida/sobremesa sao alimentos comuns (nao ha entidade propria).
-
-    TRANSICAO: o codigo atual ainda grava category_id/base_price/is_available.
-    Os listeners no fim do arquivo copiam category_id para
-    composition_category_id (alimento legado = alimento de composicao), entao
-    o cadastro atual continua valendo sem alteracao.
-    LEGADO (remover na Fase 2): category_id, base_price, is_available,
-    modifier_groups, category."""
-
     __tablename__ = "alimento"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
@@ -307,8 +295,8 @@ class Food(Base):
     image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))  # upload: Fase 5
 
     # --- LEGADO (Fase 2)
-    category_id: Mapped[uuid.UUID] = mapped_column(
-        "categoria_id", ForeignKey("categoria_alimento.id"), nullable=False
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        "categoria_id", ForeignKey("categoria_alimento.id"), nullable=True
     )
     base_price: Mapped[Decimal] = mapped_column("preco_base", Numeric(10, 2), default=0, nullable=False)
     is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
@@ -321,7 +309,7 @@ class Food(Base):
     )
     sale_category: Mapped["FoodCategory | None"] = relationship(foreign_keys=[sale_category_id])
     # LEGADO (Fase 2)
-    category: Mapped["FoodCategory"] = relationship(
+    category: Mapped["FoodCategory | None"] = relationship(
         back_populates="foods", foreign_keys=[category_id]
     )
     modifier_groups: Mapped[list["ModifierGroup"]] = relationship(
@@ -335,6 +323,10 @@ class Food(Base):
             name="ck_alimento_avulso_completo",
         ),
         CheckConstraint("preco_avulso IS NULL OR preco_avulso >= 0", name="ck_alimento_preco_avulso"),
+        CheckConstraint(
+            "categoria_id IS NOT NULL OR categoria_composicao_id IS NOT NULL OR categoria_venda_id IS NOT NULL",
+            name="ck_alimento_tem_categoria",
+        ),
         Index("idx_alimento_categoria_composicao", "categoria_composicao_id"),
         Index("idx_alimento_categoria_venda", "categoria_venda_id"),
     )

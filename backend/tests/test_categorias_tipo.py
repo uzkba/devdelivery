@@ -75,6 +75,18 @@ def test_delete_categoria_composicao_com_alimento_ativo_da_409(client, db, resta
     assert r.status_code == 409
 
 
+def test_delete_categoria_venda_com_alimento_avulso_ativo_da_409(client, db, restaurante, admin_user, token_para):
+    cat = _criar_categoria_direta(db, restaurante, "Feijoadas", "venda")
+    db.add(Food(restaurant_id=restaurante.id, category_id=None, sale_category_id=cat.id,
+                is_sellable_alone=True, standalone_price=Decimal("32.90"),
+                name="Feijoada", base_price=Decimal("0"), is_active=True))
+    db.flush()
+
+    r = client.delete(f"/categorias/{cat.id}", headers=auth(admin_user, token_para))
+
+    assert r.status_code == 409
+
+
 def test_delete_categoria_composicao_com_alimento_inativo_passa(client, db, restaurante, admin_user, token_para):
     cat = _criar_categoria_direta(db, restaurante, "Arroz", "composicao")
     db.add(Food(restaurant_id=restaurante.id, category_id=cat.id, name="Arroz antigo",
