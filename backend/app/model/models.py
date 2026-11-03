@@ -983,14 +983,3 @@ def _food_mirror_composition_on_insert(mapper, connection, target):
 def _food_mirror_composition_on_update(mapper, connection, target):
     if target.sale_category_id is None and sa_inspect(target).attrs.category_id.history.has_changes():
         target.composition_category_id = target.category_id
-
-
-class ReceivingAccount(Base):
-    __tablename__ = "conta_recebimento"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    pix_key: Mapped[str] = mapped_column("chave_pix", String(140), nullable=False)
-    pix_key_type: Mapped[str] = mapped_column("tipo_chave_pix", String(20), nullable=False)
-    account_holder: Mapped[str] = mapped_column("titular", String(150), nullable=False)
-    city: Mapped[str] = mapped_column("cidade", String(60), nullable=False)
-    active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, default=datetime.utcnow, nullable=False)
