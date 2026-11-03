@@ -7,7 +7,9 @@ from app.routers import (
     cardapio_do_dia_route,
     categoria_alimento_route,
     cliente_route,
+    combo_route,
     endereco_route,
+    marmita_route,
     pedido_route,
     auditoria_route,
     teste,
@@ -46,6 +48,8 @@ app.include_router(relatorio_route.router)
 app.include_router(auditoria_route.router)
 app.include_router(admin_cardapio_route.router)
 app.include_router(restaurante_route.router)
+app.include_router(marmita_route.router)
+app.include_router(combo_route.router)
 
 @app.get("/health")
 def health_check():
