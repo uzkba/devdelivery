@@ -4,20 +4,20 @@ app/services/categoria_alimento_service.py
 Regras de negócio do CRUD de categoria de alimento:
 - toda operação é escopada por restaurante (restaurant_id vem do usuário
   autenticado, nunca do client)
-- nome único por restaurante (case-insensitive) — bate com a
-  UniqueConstraint("restaurante_id", "nome") que já existe no model
-- delete é soft-delete (ativo=False): Food.category_id é FK NOT NULL sem
-  ondelete, então apagar de verdade quebraria alimentos já cadastrados
-  (relevante para a task #15, de outro colega)
+- nome único por restaurante (case-insensitive), alinhado à
+  UniqueConstraint("restaurante_id", "nome") do model
+- `tipo` (composicao | venda) é definido na criação e não muda
+- delete é soft-delete (ativo=False) e é BLOQUEADO (409) se ainda houver
+  alimento ativo usando a categoria
 """
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.model.models import FoodCategory
+from app.model.models import Food, FoodCategory
 from app.schemas.categoria_alimento_schemas import (
     CategoriaAlimentoCreate,
     CategoriaAlimentoUpdate,
@@ -46,6 +46,7 @@ def criar_categoria(db: Session, restaurant_id: uuid.UUID, dados: CategoriaAlime
         name=dados.nome,
         description=dados.descricao,
         display_order=dados.ordem_exibicao,
+        type=dados.tipo,
     )
     db.add(categoria)
     db.commit()
@@ -53,10 +54,17 @@ def criar_categoria(db: Session, restaurant_id: uuid.UUID, dados: CategoriaAlime
     return categoria
 
 
-def listar_categorias(db: Session, restaurant_id: uuid.UUID, apenas_ativas: bool = False) -> List[FoodCategory]:
+def listar_categorias(
+    db: Session,
+    restaurant_id: uuid.UUID,
+    apenas_ativas: bool = False,
+    tipo: Optional[str] = None,
+) -> List[FoodCategory]:
     query = db.query(FoodCategory).filter(FoodCategory.restaurant_id == restaurant_id)
     if apenas_ativas:
         query = query.filter(FoodCategory.is_active.is_(True))
+    if tipo:
+        query = query.filter(FoodCategory.type == tipo)
     return query.order_by(FoodCategory.display_order, FoodCategory.name).all()
 
 
@@ -101,11 +109,27 @@ def atualizar_categoria(
     return categoria
 
 
+def _categoria_em_uso(db: Session, categoria: FoodCategory) -> bool:
+    """True se existe alimento ATIVO apontando para a categoria.
+    Composição: considera também o legado Food.category_id."""
+    if categoria.type == "venda":
+        filtro = Food.sale_category_id == categoria.id
+    else:
+        filtro = or_(Food.composition_category_id == categoria.id, Food.category_id == categoria.id)
+    return db.query(Food.id).filter(filtro, Food.is_active.is_(True)).first() is not None
+
+
 def remover_categoria(db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.UUID) -> FoodCategory:
-    """Soft-delete: marca ativo=False. Não apaga a linha porque Food.category_id
-    é FK NOT NULL para categoria_alimento sem ondelete — um DELETE real falharia
-    (ou pior, seria bloqueado) assim que houver algum alimento na categoria."""
+    """Soft-delete: marca ativo=False. Não apaga a linha (FKs de alimento e de
+    marmita_categoria apontam para ela)."""
     categoria = buscar_categoria_por_id(db, restaurant_id, categoria_id)
+
+    if _categoria_em_uso(db, categoria):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Categoria possui alimentos ativos. Mova ou desative-os antes.",
+        )
+
     categoria.is_active = False
     db.commit()
     db.refresh(categoria)

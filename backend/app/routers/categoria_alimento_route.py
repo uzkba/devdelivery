@@ -1,25 +1,16 @@
 """
 app/routers/categoria_alimento_route.py
 
-Endpoints:
 POST   /categorias
-GET    /categorias
+GET    /categorias?apenas_ativas=&tipo=composicao|venda
 GET    /categorias/{categoria_id}
 PUT    /categorias/{categoria_id}
 DELETE /categorias/{categoria_id}
 
-Escopo por restaurante: restaurant_id vem do usuário admin autenticado
-(current_user.restaurant_id), nunca é enviado pelo client — assim um admin
-de um restaurante não consegue ler/editar categoria de outro.
-
-ATENÇÃO / ajustar conforme o depedencias.py real:
-- Assumi que AuthenticatedUser tem o atributo `restaurant_id`. Se o nome
-  real for outro (ex: `restaurante_id`), ajuste as referências abaixo.
-- Assumi papéis "admin" para escrita e "admin"/"atendente"/"caixa" para
-  leitura, no mesmo espírito do que já foi usado nos endpoints de
-  endereço de cliente. Ajuste conforme a regra real do time.
+restaurant_id vem sempre do usuário autenticado.
 """
 import uuid
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -48,10 +39,11 @@ def criar_categoria(
 @router.get("", response_model=list[CategoriaAlimentoResponse])
 def listar_categorias(
     apenas_ativas: bool = Query(False, description="Se true, retorna apenas categorias ativas"),
+    tipo: Optional[Literal["composicao", "venda"]] = Query(None, description="Filtra pelo tipo da categoria"),
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_role("admin", "atendente", "caixa")),
 ):
-    return service.listar_categorias(db, current_user.restaurant_id, apenas_ativas=apenas_ativas)
+    return service.listar_categorias(db, current_user.restaurant_id, apenas_ativas=apenas_ativas, tipo=tipo)
 
 
 @router.get("/{categoria_id}", response_model=CategoriaAlimentoResponse)

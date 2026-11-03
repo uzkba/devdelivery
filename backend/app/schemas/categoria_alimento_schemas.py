@@ -1,21 +1,15 @@
 """
 app/schemas/categoria_alimento_schemas.py
 
-Schemas do CRUD de categoria de alimento, alinhados ao model FoodCategory:
-- atributos Python do model são em inglês (name, description, display_order,
-  is_active, restaurant_id), com as colunas do banco em português via
-  mapped_column("nome_coluna", ...).
-- os schemas de RESPOSTA usam `validation_alias` para ler o atributo Python
-  correto do objeto ORM, mas mantêm o nome do campo (e portanto a chave no
-  JSON de saída) em português — sem validation_alias, o Pydantic tentaria
-  ler um atributo "descricao"/"ordem_exibicao"/"ativo" que não existe no
-  objeto Python (esse foi o bug do ResponseValidationError).
-- os schemas de ENTRADA (Create/Update) não vêm de um objeto ORM, então
-  não precisam de alias — o service.py já faz a tradução manual
-  (dados.nome -> name=..., etc.) na hora de montar o FoodCategory.
+Schemas do CRUD de categoria de alimento, alinhados ao model FoodCategory.
+- Respostas usam validation_alias para ler o atributo Python (inglês) e
+  expor a chave em português no JSON.
+- Entrada (Create/Update) não vem de ORM; o service traduz manualmente.
+- `tipo` define a natureza da categoria (RN-C01) e é imutável depois de criada:
+  por isso existe no Create mas NÃO no Update.
 """
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,6 +18,10 @@ class CategoriaAlimentoBase(BaseModel):
     nome: str = Field(..., min_length=1, max_length=60, description="Nome da categoria (ex: Bebidas)")
     descricao: Optional[str] = Field(None, description="Descrição opcional da categoria")
     ordem_exibicao: int = Field(0, ge=0, description="Ordem de exibição no cardápio")
+    tipo: Literal["composicao", "venda"] = Field(
+        "composicao",
+        description="composicao = monta marmitas (arroz, proteína...); venda = produtos avulsos (pratos, bebidas...)",
+    )
 
     @field_validator("nome")
     @classmethod
@@ -48,7 +46,7 @@ class CategoriaAlimentoCreate(CategoriaAlimentoBase):
 
 
 class CategoriaAlimentoUpdate(BaseModel):
-    """Payload para PUT /categorias/:id. Todos os campos opcionais."""
+    """Payload para PUT /categorias/:id. Todos opcionais. Sem `tipo` (imutável)."""
     nome: Optional[str] = Field(None, min_length=1, max_length=60)
     descricao: Optional[str] = None
     ordem_exibicao: Optional[int] = Field(None, ge=0)
@@ -71,5 +69,6 @@ class CategoriaAlimentoResponse(BaseModel):
     descricao: Optional[str] = Field(None, validation_alias="description")
     ordem_exibicao: int = Field(..., validation_alias="display_order")
     ativo: bool = Field(..., validation_alias="is_active")
+    tipo: str = Field(..., validation_alias="type")
 
     model_config = {"from_attributes": True, "populate_by_name": True}

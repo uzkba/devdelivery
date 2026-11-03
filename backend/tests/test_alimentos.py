@@ -297,3 +297,180 @@ def test_deletar_alimento_de_outro_restaurante_da_404(client, db, categoria_b, a
     resp = client.delete(f"/alimentos/{alimento_de_b.id}", headers=auth(admin_user, token_para))
 
     assert resp.status_code == 404
+
+
+# ── Produto avulso (Fase 2) ──────────────────────────────────────
+
+@pytest.fixture()
+def categoria_venda(db, restaurante):
+    c = FoodCategory(restaurant_id=restaurante.id, name="Pratos do dia", display_order=0, type="venda")
+    db.add(c)
+    db.flush()
+    db.refresh(c)
+    return c
+
+
+def _payload_avulso(categoria_venda, **extra):
+    return {
+        "nome": "Feijoada",
+        "vendavel_avulso": True,
+        "preco_avulso": "32.90",
+        "categoria_venda_id": str(categoria_venda.id),
+        **extra,
+    }
+
+
+def test_criar_avulso_puro_sem_categoria_de_composicao(client, categoria_venda, admin_user, token_para):
+    r = client.post("/alimentos", json=_payload_avulso(categoria_venda), headers=auth(admin_user, token_para))
+
+    assert r.status_code == 201
+    d = r.json()
+    assert d["vendavel_avulso"] is True
+    assert d["categoria_id"] is None
+    assert d["categoria_venda_id"] == str(categoria_venda.id)
+    assert Decimal(d["preco_avulso"]) == Decimal("32.90")
+    assert d["destaque"] is False
+
+
+def test_criar_alimento_dupla_natureza(client, categoria, categoria_venda, admin_user, token_para):
+    payload = _payload_avulso(categoria_venda, nome="Farofa", categoria_id=str(categoria.id), destaque=True)
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 201
+    d = r.json()
+    assert d["categoria_id"] == str(categoria.id)
+    assert d["categoria_venda_id"] == str(categoria_venda.id)
+    assert d["destaque"] is True
+
+
+def test_avulso_sem_preco_da_422(client, categoria_venda, admin_user, token_para):
+    payload = _payload_avulso(categoria_venda)
+    del payload["preco_avulso"]
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_avulso_sem_categoria_de_venda_da_422(client, categoria, admin_user, token_para):
+    payload = {"nome": "X", "vendavel_avulso": True, "preco_avulso": "10", "categoria_id": str(categoria.id)}
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_preco_avulso_com_vendavel_false_da_422(client, categoria, admin_user, token_para):
+    payload = {"nome": "X", "preco_base": "10", "categoria_id": str(categoria.id), "preco_avulso": "10"}
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_sem_nenhuma_categoria_da_422(client, admin_user, token_para):
+    r = client.post("/alimentos", json={"nome": "Solto", "preco_base": "10"}, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_categoria_venda_com_tipo_composicao_da_422(client, categoria, admin_user, token_para):
+    payload = {"nome": "X", "vendavel_avulso": True, "preco_avulso": "10", "categoria_venda_id": str(categoria.id)}
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_categoria_composicao_com_tipo_venda_da_422(client, categoria_venda, admin_user, token_para):
+    payload = {"nome": "X", "preco_base": "10", "categoria_id": str(categoria_venda.id)}
+
+    r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_categoria_venda_de_outro_restaurante_da_404(client, db, outro_restaurante, admin_user, token_para):
+    cat_b = FoodCategory(restaurant_id=outro_restaurante.id, name="Venda B", display_order=0, type="venda")
+    db.add(cat_b)
+    db.flush()
+
+    r = client.post("/alimentos", json=_payload_avulso(cat_b), headers=auth(admin_user, token_para))
+
+    assert r.status_code == 404
+
+
+def test_atualizar_desligar_avulso_limpa_preco_e_categoria_de_venda(
+    client, categoria, categoria_venda, admin_user, token_para
+):
+    h = auth(admin_user, token_para)
+    criado = client.post("/alimentos", json=_payload_avulso(categoria_venda, categoria_id=str(categoria.id)), headers=h)
+    assert criado.status_code == 201
+
+    r = client.put(f"/alimentos/{criado.json()['id']}", json={"vendavel_avulso": False}, headers=h)
+
+    assert r.status_code == 200
+    d = r.json()
+    assert d["vendavel_avulso"] is False
+    assert d["preco_avulso"] is None
+    assert d["categoria_venda_id"] is None
+    assert d["categoria_id"] == str(categoria.id)
+
+
+def test_atualizar_desligar_avulso_puro_da_422(client, categoria_venda, admin_user, token_para):
+    """Avulso puro não tem categoria de composição: desligar deixaria sem nenhuma categoria."""
+    h = auth(admin_user, token_para)
+    criado = client.post("/alimentos", json=_payload_avulso(categoria_venda), headers=h)
+
+    r = client.put(f"/alimentos/{criado.json()['id']}", json={"vendavel_avulso": False}, headers=h)
+
+    assert r.status_code == 422
+
+
+def test_atualizar_tornar_avulso_mantem_categoria_legada(client, db, categoria, categoria_venda, admin_user, token_para):
+    h = auth(admin_user, token_para)
+    alimento = criar_alimento_direto(db, categoria, name="Arroz")
+
+    r = client.put(
+        f"/alimentos/{alimento.id}",
+        json={"vendavel_avulso": True, "preco_avulso": "8.00", "categoria_venda_id": str(categoria_venda.id)},
+        headers=h,
+    )
+
+    assert r.status_code == 200
+    d = r.json()
+    assert d["categoria_id"] == str(categoria.id)
+    assert d["categoria_venda_id"] == str(categoria_venda.id)
+    assert Decimal(d["preco_avulso"]) == Decimal("8.00")
+
+
+def test_atualizar_preco_avulso_em_alimento_nao_avulso_da_422(client, db, categoria, admin_user, token_para):
+    alimento = criar_alimento_direto(db, categoria, name="Arroz")
+
+    r = client.put(f"/alimentos/{alimento.id}", json={"preco_avulso": "8.00"}, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 422
+
+
+def test_listar_filtra_vendavel_avulso(client, categoria, categoria_venda, admin_user, token_para):
+    h = auth(admin_user, token_para)
+    client.post("/alimentos", json=_payload_avulso(categoria_venda), headers=h)
+    client.post("/alimentos", json={"nome": "Arroz", "preco_base": "5", "categoria_id": str(categoria.id)}, headers=h)
+
+    r = client.get("/alimentos?vendavel_avulso=true", headers=h)
+
+    assert {i["nome"] for i in r.json()} == {"Feijoada"}
+
+
+def test_listar_filtra_por_categoria_de_venda(client, db, restaurante, categoria_venda, admin_user, token_para):
+    h = auth(admin_user, token_para)
+    outra = FoodCategory(restaurant_id=restaurante.id, name="Bebidas", display_order=1, type="venda")
+    db.add(outra)
+    db.flush()
+    client.post("/alimentos", json=_payload_avulso(categoria_venda), headers=h)
+    client.post("/alimentos", json=_payload_avulso(outra, nome="Suco", preco_avulso="7.00"), headers=h)
+
+    r = client.get(f"/alimentos?categoria_venda_id={outra.id}", headers=h)
+
+    assert {i["nome"] for i in r.json()} == {"Suco"}
