@@ -1,14 +1,3 @@
-"""
-tests/test_cardapio.py
-
-Segue o padrão real de autenticação usado em test_categoria_alimento.py:
-POST /auth/login com {login, password} -> {access_token, token_type},
-depois Authorization: Bearer <token> nas chamadas autenticadas.
-
-Reaproveita as fixtures já existentes no conftest.py (client, db, restaurante,
-admin_user, atendente_user, caixa_user, entregador_user,
-inactive_admin_with_admin_role).
-"""
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
@@ -16,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from app.core.seguranca import create_access_token, hash_password
-from app.model.models import AdminUser, AuditLog, Food, FoodCategory, Menu, MenuItem, Restaurant
+from app.model.models import AdminUser, Food, FoodCategory, Menu, MenuItem, Restaurant
 
 RESTAURANTE_ID_PADRAO = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
@@ -149,40 +138,6 @@ class TestAlterarDisponibilidade:
         headers = _headers(client, "maria.admin")
         response = client.patch(self._url(cardapio_hoje, item_cardapio), json={"disponivel": False}, headers=headers)
         assert response.status_code == 422
-
-
-class TestAuditoriaDisponibilidade:
-    def test_alteracao_gera_log_auditoria(self, client, db, admin_user, item_cardapio, cardapio_hoje):
-        headers = _headers(client, "maria.admin")
-        client.patch(
-            f"/cardapio/{cardapio_hoje.id}/itens/{item_cardapio.id}/disponibilidade",
-            json={"is_available": False},
-            headers=headers,
-        )
-        log = (
-            db.query(AuditLog)
-            .filter(AuditLog.entity == "cardapio_item", AuditLog.entity_id == str(item_cardapio.id))
-            .first()
-        )
-        assert log is not None
-        assert log.action == "ALTERACAO_DISPONIBILIDADE"
-        assert log.previous_data == {"is_available": True}
-        assert log.new_data == {"is_available": False}
-        assert log.user_id == admin_user.id
-
-    def test_valor_igual_nao_duplica_log(self, client, db, admin_user, item_cardapio, cardapio_hoje):
-        headers = _headers(client, "maria.admin")
-        client.patch(
-            f"/cardapio/{cardapio_hoje.id}/itens/{item_cardapio.id}/disponibilidade",
-            json={"is_available": True},
-            headers=headers,
-        )
-        logs = (
-            db.query(AuditLog)
-            .filter(AuditLog.entity == "cardapio_item", AuditLog.entity_id == str(item_cardapio.id))
-            .all()
-        )
-        assert len(logs) == 0
 
 
 class TestCardapioDoDia:

@@ -6,9 +6,6 @@ from fastapi import HTTPException
 
 from app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
 from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate, validar_regras_avulso
-from app.services.auditoria_service import (
-    registrar_log_auditoria, serializar_entidade, ACAO_CRIACAO, ACAO_EDICAO, ACAO_EXCLUSAO,
-)
 
 
 def _get_categoria_ou_404(
@@ -72,8 +69,6 @@ def criar_alimento(
         name=payload.nome,
         description=payload.descricao,
         base_price=payload.preco_base,
-        # category_id é o espelho legado; composition_category_id é explícito porque
-        # o listener do models.py não atua quando há categoria de venda definida.
         category_id=payload.categoria_id,
         composition_category_id=payload.categoria_id,
         sale_category_id=payload.categoria_venda_id,
@@ -103,16 +98,6 @@ def criar_alimento(
                     is_available=o_data.disponivel,
                 )
                 db.add(opcao)
-
-    registrar_log_auditoria(
-        db,
-        restaurant_id=restaurant_id,
-        user_id=usuario_id,
-        entidade="alimento",
-        entidade_id=novo.id,
-        acao=ACAO_CRIACAO,
-        dados_novos=novo,
-    )
 
     db.commit()
     return get_alimento_por_id(db, novo.id, restaurant_id)
@@ -150,8 +135,6 @@ def atualizar_alimento(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    dados_anteriores = serializar_entidade(alimento, "alimento")
-
     if "categoria_id" in dados:
         alimento.category_id = dados["categoria_id"]
         alimento.composition_category_id = dados["categoria_id"]
@@ -170,17 +153,6 @@ def atualizar_alimento(
     if "preco_base" in dados and dados["preco_base"] is not None:
         alimento.base_price = dados["preco_base"]
 
-    registrar_log_auditoria(
-        db,
-        restaurant_id=restaurant_id,
-        user_id=usuario_id,
-        entidade="alimento",
-        entidade_id=alimento.id,
-        acao=ACAO_EDICAO,
-        dados_anteriores=dados_anteriores,
-        dados_novos=alimento,
-    )
-
     db.commit()
     return get_alimento_por_id(db, alimento.id, restaurant_id)
 
@@ -193,18 +165,6 @@ def desativar_alimento(
     if not alimento.is_active:
         raise HTTPException(status_code=400, detail="Alimento já está inativo.")
 
-    dados_anteriores = serializar_entidade(alimento, "alimento")
     alimento.is_active = False
-
-    registrar_log_auditoria(
-        db,
-        restaurant_id=restaurant_id,
-        user_id=usuario_id,
-        entidade="alimento",
-        entidade_id=alimento.id,
-        acao=ACAO_EXCLUSAO,
-        dados_anteriores=dados_anteriores,
-        dados_novos=alimento,
-    )
 
     db.commit()

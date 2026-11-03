@@ -18,7 +18,6 @@ from app.model.models import (
     Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
 )
 from app.api.depedencias import AuthenticatedClient
-from app.services.auditoria_service import registrar_log_auditoria, ACAO_CRIACAO
 from app.utils.geo import calcular_distancia_km
 
 
@@ -260,16 +259,6 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
                     status_code=400, detail="Valor pago em dinheiro é menor que o total do pedido."
                 )
             novo_pedido.change_amount = novo_pedido.cash_paid_amount - novo_pedido.total_amount
-
-        registrar_log_auditoria(
-            db,
-            restaurant_id=novo_pedido.restaurant_id,
-            user_id=None,
-            entidade="pedido",
-            entidade_id=novo_pedido.id,
-            acao=ACAO_CRIACAO,
-            dados_novos=novo_pedido,
-        )
 
         db.commit()
     except HTTPException:
