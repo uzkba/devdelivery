@@ -5,7 +5,7 @@ from typing import List
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.model.models import AuditLog, Food, FoodCategory, Menu, MenuItem
+from app.model.models import Food, FoodCategory, Menu, MenuItem
 from app.schemas.cardapio_schemas import CardapioCreate, CardapioItensCreate
 
 
@@ -61,24 +61,10 @@ def marcar_disponibilidade(
     )
     if resultado is None:
         raise ValueError("Item não encontrado neste cardápio")
-    item, menu = resultado
-    disponibilidade_anterior = item.is_available
+    item, _ = resultado
     item.is_available = is_available
     db.commit()
     db.refresh(item)
-    if disponibilidade_anterior != is_available:
-        db.add(
-            AuditLog(
-                restaurant_id=menu.restaurant_id,
-                user_id=user_id,
-                entity="cardapio_item",
-                entity_id=str(item.id),
-                action="ALTERACAO_DISPONIBILIDADE",
-                previous_data={"is_available": disponibilidade_anterior},
-                new_data={"is_available": is_available},
-            )
-        )
-        db.commit()
     return item
 
 def _buscar_cardapio_por_data(db: Session, restaurant_id: uuid.UUID, dia: date):

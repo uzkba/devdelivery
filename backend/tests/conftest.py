@@ -1,5 +1,4 @@
 import os
-import uuid
 from pathlib import Path
 
 from decimal import Decimal
@@ -34,7 +33,6 @@ from app.model.models import (
     OrderStatus,
     PaymentMethod,
     Restaurant,
-    AuditLog,
     Client,
     CustomerAddress,
 )
@@ -361,57 +359,6 @@ def pedido_teste(db, restaurante, cliente, endereco, forma_pagamento_dinheiro, s
     db.flush()
     db.refresh(pedido)
     return pedido
-
-
-@pytest.fixture()
-def log_do_outro_restaurante(db, outro_restaurante):
-    log = AuditLog(
-        restaurant_id=outro_restaurante.id,
-        user_id=None,
-        entity="alimento",
-        entity_id=str(uuid.uuid4()),
-        action="CRIACAO",
-        previous_data=None,
-        new_data={"nome": "Prato de outro restaurante"},
-    )
-    db.add(log)
-    db.flush()
-    db.refresh(log)
-    return log
-
-
-@pytest.fixture()
-def algum_log_de_pedido(db, restaurante):
-    log = AuditLog(
-        restaurant_id=restaurante.id,
-        user_id=None,
-        entity="pedido",
-        entity_id=str(uuid.uuid4()),
-        action="CRIACAO",
-        previous_data=None,
-        new_data={"total_amount": "25.90"},
-    )
-    db.add(log)
-    db.flush()
-    db.refresh(log)
-    return log
-
-
-@pytest.fixture()
-def algum_log_de_alimento(db, restaurante, admin_user):
-    log = AuditLog(
-        restaurant_id=restaurante.id,
-        user_id=admin_user.id,
-        entity="alimento",
-        entity_id=str(uuid.uuid4()),
-        action="CRIACAO",
-        previous_data=None,
-        new_data={"nome": "Feijoada"},
-    )
-    db.add(log)
-    db.flush()
-    db.refresh(log)
-    return log
 
 
 @pytest.fixture()

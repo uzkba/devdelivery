@@ -11,7 +11,6 @@ from app.routers import (
     endereco_route,
     marmita_route,
     pedido_route,
-    auditoria_route,
     teste,
     fechamento_caixa_route,
     relatorio_route,
@@ -45,7 +44,6 @@ app.include_router(cardapio_do_dia_route.router)
 app.include_router(pedido_route.router)
 app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
-app.include_router(auditoria_route.router)
 app.include_router(admin_cardapio_route.router)
 app.include_router(restaurante_route.router)
 app.include_router(marmita_route.router)

@@ -1,30 +1,3 @@
-"""NexusDelivery - modelos do banco (ETAPA 1: transicao).
-
-Este arquivo e o modelo final (Modelagem v3.x) MAIS o legado que o codigo atual
-ainda usa. Tudo que e legado esta marcado com "LEGADO (remover na Fase N)" e
-fica agrupado no fim do arquivo, exceto as colunas legadas de Food.
-
-Remocao do legado, por fase:
-  Fase 2  : Food.category_id/base_price/is_available, ModifierGroup, ModifierOption
-  Fase 3  : Menu, MenuItem
-  Fase 10 : OrderItemOption (OrderItem.selected_options)
-
-Convencao do projeto: atributo em ingles, tabela/coluna em portugues
-(mapped_column("nome", ...)). IDs sao UUID.
-
-Mapa do arquivo
-    1. Restaurante e horario de atendimento
-    2. Clientes e enderecos
-    3. Equipe (usuario_admin) e convite
-    4. Catalogo: categoria, alimento, marmita, combo, disponibilidade
-    5. Pedido: pedido, item, historico, auditoria
-    6. Financeiro: fechamento de caixa
-    7. Entrega: configuracao, taxa por bairro, taxa por distancia
-
-Convencao de data/hora: tabelas antigas usam DateTime sem fuso; tabelas
-criadas a partir da Fase 1 usam DateTime(timezone=True). A unificacao fica
-para uma migration futura.
-"""
 import enum
 import uuid
 from datetime import date, datetime, time
@@ -653,7 +626,6 @@ class Order(Base):
     restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
     client_id: Mapped[uuid.UUID] = mapped_column("cliente_id", ForeignKey("cliente.id"), nullable=False)
     status_id: Mapped[uuid.UUID] = mapped_column("status_id", ForeignKey("status_pedido.id"), nullable=False)
-    # unica coluna mutavel apos a criacao (RN-P11), ate o status final; trocas vao para log_auditoria
     payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_pagamento_id", ForeignKey("forma_pagamento.id"), nullable=False)
     order_datetime: Mapped[datetime] = mapped_column("data_hora", DateTime, server_default=func.now())
 
@@ -694,13 +666,6 @@ class Order(Base):
 
 
 class OrderItem(Base):
-    """Item do pedido. Aponta para UM item do catalogo (alimento, marmita ou
-    combo) e guarda um snapshot: nome, preco e configuracao no momento da
-    compra, sem alteracao retroativa. Configuracao de marmita personalizavel e
-    componentes do combo ficam em snapshot_json (nao ha tabela de opcoes).
-
-    As FKs usam SET NULL (alimento, legado) e RESTRICT (marmita, combo): item
-    de catalogo ja vendido deve ser desativado, nao excluido."""
 
     __tablename__ = "pedido_item"
 
@@ -754,25 +719,6 @@ class OrderStatusHistory(Base):
     order: Mapped["Order"] = relationship(back_populates="status_history")
 
     __table_args__ = (Index("idx_historico_status_pedido", "pedido_id", "alterado_em"),)
-
-
-class AuditLog(Base):
-    __tablename__ = "log_auditoria"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
-    user_id: Mapped[uuid.UUID | None] = mapped_column("usuario_id", ForeignKey("usuario_admin.id"))
-    entity: Mapped[str] = mapped_column("entidade", String(50), nullable=False)
-    entity_id: Mapped[str] = mapped_column("entidade_id", String(50), nullable=False)
-    action: Mapped[str] = mapped_column("acao", String(30), nullable=False)
-    previous_data: Mapped[dict | None] = mapped_column("dados_anteriores", JSONB)
-    new_data: Mapped[dict | None] = mapped_column("dados_novos", JSONB)
-    created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-
-    __table_args__ = (
-        Index("idx_log_auditoria_entidade", "entidade", "entidade_id"),
-        Index("idx_log_auditoria_restaurante_periodo", "restaurante_id", "criado_em"),
-    )
 
 
 # ===========================================================================
