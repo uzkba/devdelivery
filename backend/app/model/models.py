@@ -267,6 +267,16 @@ class Food(Base):
     )
     image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))  # upload: Fase 5
 
+    serves_people: Mapped[int | None] = mapped_column("serve_pessoas", Integer)
+    portion_amount: Mapped[Decimal | None] = mapped_column("porcao_quantidade", Numeric(8, 2))
+    portion_unit: Mapped[str | None] = mapped_column("porcao_unidade", String(2))
+    prep_time_minutes: Mapped[int | None] = mapped_column("tempo_preparo_minutos", Integer)
+
+    calories_kcal: Mapped[int | None] = mapped_column("calorias_kcal", Integer)
+    protein_g: Mapped[Decimal | None] = mapped_column("proteina_g", Numeric(6, 1))
+    carbs_g: Mapped[Decimal | None] = mapped_column("carboidrato_g", Numeric(6, 1))
+    fat_g: Mapped[Decimal | None] = mapped_column("gordura_g", Numeric(6, 1))
+
     # --- LEGADO (Fase 2)
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         "categoria_id", ForeignKey("categoria_alimento.id"), nullable=True
@@ -289,6 +299,13 @@ class Food(Base):
         back_populates="food", cascade="all, delete-orphan"
     )
 
+    components: Mapped[list["FoodComponent"]] = relationship(
+        back_populates="food",
+        cascade="all, delete-orphan",
+        order_by="FoodComponent.position",
+        lazy="selectin",
+    )
+
     __table_args__ = (
         CheckConstraint("preco_base >= 0", name="ck_alimento_preco_base_positivo"),  # LEGADO
         CheckConstraint(
@@ -300,9 +317,47 @@ class Food(Base):
             "categoria_id IS NOT NULL OR categoria_composicao_id IS NOT NULL OR categoria_venda_id IS NOT NULL",
             name="ck_alimento_tem_categoria",
         ),
+                CheckConstraint("serve_pessoas IS NULL OR serve_pessoas BETWEEN 1 AND 50", name="ck_alimento_serve_pessoas"),
+        CheckConstraint("porcao_quantidade IS NULL OR porcao_quantidade > 0", name="ck_alimento_porcao_quantidade"),
+        CheckConstraint(
+            "porcao_unidade IS NULL OR porcao_unidade IN ('g', 'kg', 'ml', 'l')",
+            name="ck_alimento_porcao_unidade",
+        ),
+        CheckConstraint(
+            "(porcao_quantidade IS NULL) = (porcao_unidade IS NULL)", name="ck_alimento_porcao_completa"
+        ),
+        CheckConstraint(
+            "tempo_preparo_minutos IS NULL OR tempo_preparo_minutos BETWEEN 1 AND 480",
+            name="ck_alimento_tempo_preparo",
+        ),
+        CheckConstraint("calorias_kcal IS NULL OR calorias_kcal >= 0", name="ck_alimento_calorias"),
+        CheckConstraint(
+            "(proteina_g IS NULL OR proteina_g >= 0) AND "
+            "(carboidrato_g IS NULL OR carboidrato_g >= 0) AND "
+            "(gordura_g IS NULL OR gordura_g >= 0)",
+            name="ck_alimento_macros",
+        ),
         Index("idx_alimento_categoria_composicao", "categoria_composicao_id"),
         Index("idx_alimento_categoria_venda", "categoria_venda_id"),
     )
+
+
+class FoodComponent(Base):
+    """Item informativo da seção 'O que vem' do produto avulso (sem vínculo com outros Food)."""
+
+    __tablename__ = "alimento_componente"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    food_id: Mapped[uuid.UUID] = mapped_column(
+        "alimento_id", ForeignKey("alimento.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column("nome", String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column("descricao", String(300))
+    position: Mapped[int] = mapped_column("posicao", Integer, nullable=False)
+
+    food: Mapped["Food"] = relationship(back_populates="components")
+
+    __table_args__ = (Index("idx_alimento_componente_alimento", "alimento_id", "posicao"),)
 
 
 # ---------------------------------------------------------------------------
