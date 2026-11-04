@@ -18,7 +18,8 @@ def criar_alimento(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_role("admin")),
 ):
-    return alimento_service.criar_alimento(db, payload, current_user.restaurant_id, current_user.id)
+    return alimento_service.criar_alimento(db, payload, current_user.restaurant_id)
+
 
 
 @router.get("", response_model=List[AlimentoOut])
@@ -57,7 +58,7 @@ def atualizar_alimento(
     current_user: AuthenticatedUser = Depends(require_role("admin")),
 ):
     return alimento_service.atualizar_alimento(
-        db, alimento_id, payload, current_user.restaurant_id, current_user.id
+        db, alimento_id, payload, current_user.restaurant_id
     )
 
 
@@ -67,4 +68,4 @@ def desativar_alimento(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_role("admin")),
 ):
-    alimento_service.desativar_alimento(db, alimento_id, current_user.restaurant_id, current_user.id)
+    alimento_service.desativar_alimento(db, alimento_id, current_user.restaurant_id)

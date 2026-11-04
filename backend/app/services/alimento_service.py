@@ -4,8 +4,15 @@ from typing import Optional
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
 
-from app.model.models import Food, FoodCategory, ModifierGroup, ModifierOption
-from app.schemas.alimento_schemas import AlimentoCreate, AlimentoUpdate, validar_regras_avulso
+from app.model.models import Food, FoodCategory, FoodComponent, ModifierGroup, ModifierOption
+from app.schemas.alimento_schemas import (
+    AlimentoCreate,
+    AlimentoUpdate,
+    ComponenteIn,
+    UnidadePorcao,
+    validar_porcao,
+    validar_regras_avulso,
+)
 
 
 def _get_categoria_ou_404(
@@ -18,6 +25,26 @@ def _get_categoria_ou_404(
     if tipo and categoria.type != tipo:
         raise HTTPException(status_code=422, detail=f"A categoria informada deve ser do tipo '{tipo}'.")
     return categoria
+
+
+_CAMPOS_OPCIONAIS = {
+    "serve_pessoas": "serves_people",
+    "porcao_quantidade": "portion_amount",
+    "porcao_unidade": "portion_unit",
+    "tempo_preparo_minutos": "prep_time_minutes",
+    "calorias_kcal": "calories_kcal",
+    "proteina_g": "protein_g",
+    "carboidrato_g": "carbs_g",
+    "gordura_g": "fat_g",
+}
+
+
+def _montar_componentes(itens: list[ComponenteIn]) -> list[FoodComponent]:
+    """A posição é a ordem da lista recebida."""
+    return [
+        FoodComponent(name=item.nome, description=item.descricao, position=posicao)
+        for posicao, item in enumerate(itens)
+    ]
 
 
 def get_alimento_por_id(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID) -> Food:
@@ -56,9 +83,7 @@ def listar_alimentos(
     return query.all()
 
 
-def criar_alimento(
-    db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
-) -> Food:
+def criar_alimento(db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID) -> Food:
     if payload.categoria_id:
         _get_categoria_ou_404(db, payload.categoria_id, restaurant_id, tipo="composicao")
     if payload.categoria_venda_id:
@@ -75,6 +100,15 @@ def criar_alimento(
         is_sellable_alone=payload.vendavel_avulso,
         standalone_price=payload.preco_avulso,
         is_featured=payload.destaque,
+        serves_people=payload.serve_pessoas,
+        portion_amount=payload.porcao_quantidade,
+        portion_unit=payload.porcao_unidade.value if payload.porcao_unidade else None,
+        prep_time_minutes=payload.tempo_preparo_minutos,
+        calories_kcal=payload.calorias_kcal,
+        protein_g=payload.proteina_g,
+        carbs_g=payload.carboidrato_g,
+        fat_g=payload.gordura_g,
+        components=_montar_componentes(payload.componentes),
     )
     db.add(novo)
     db.flush()
@@ -104,8 +138,7 @@ def criar_alimento(
 
 
 def atualizar_alimento(
-    db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate,
-    restaurant_id: uuid.UUID, usuario_id: uuid.UUID,
+    db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate, restaurant_id: uuid.UUID,
 ) -> Food:
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
     dados = payload.model_dump(exclude_unset=True)
@@ -132,6 +165,10 @@ def atualizar_alimento(
             dados.get("categoria_venda_id", alimento.sale_category_id),
             dados.get("categoria_id", alimento.category_id),
         )
+        validar_porcao(
+            dados.get("porcao_quantidade", alimento.portion_amount),
+            dados.get("porcao_unidade", alimento.portion_unit),
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -153,13 +190,24 @@ def atualizar_alimento(
     if "preco_base" in dados and dados["preco_base"] is not None:
         alimento.base_price = dados["preco_base"]
 
+    for campo, atributo in _CAMPOS_OPCIONAIS.items():
+        if campo in dados:
+            valor = dados[campo]
+            if isinstance(valor, UnidadePorcao):
+                valor = valor.value
+            setattr(alimento, atributo, valor)
+
+    if "componentes" in dados:
+        # Limpa e persiste antes de recriar (mesmo padrão de marmita/combo)
+        alimento.components.clear()
+        db.flush()
+        alimento.components.extend(_montar_componentes(payload.componentes))
+
     db.commit()
     return get_alimento_por_id(db, alimento.id, restaurant_id)
 
 
-def desativar_alimento(
-    db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
-):
+def desativar_alimento(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID):
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
 
     if not alimento.is_active:
