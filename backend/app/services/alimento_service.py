@@ -83,9 +83,7 @@ def listar_alimentos(
     return query.all()
 
 
-def criar_alimento(
-    db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
-) -> Food:
+def criar_alimento(db: Session, payload: AlimentoCreate, restaurant_id: uuid.UUID) -> Food:
     if payload.categoria_id:
         _get_categoria_ou_404(db, payload.categoria_id, restaurant_id, tipo="composicao")
     if payload.categoria_venda_id:
@@ -140,8 +138,7 @@ def criar_alimento(
 
 
 def atualizar_alimento(
-    db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate,
-    restaurant_id: uuid.UUID, usuario_id: uuid.UUID,
+    db: Session, alimento_id: uuid.UUID, payload: AlimentoUpdate, restaurant_id: uuid.UUID,
 ) -> Food:
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
     dados = payload.model_dump(exclude_unset=True)
@@ -210,9 +207,7 @@ def atualizar_alimento(
     return get_alimento_por_id(db, alimento.id, restaurant_id)
 
 
-def desativar_alimento(
-    db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID, usuario_id: uuid.UUID
-):
+def desativar_alimento(db: Session, alimento_id: uuid.UUID, restaurant_id: uuid.UUID):
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
 
     if not alimento.is_active:
