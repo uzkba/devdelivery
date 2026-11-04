@@ -27,7 +27,6 @@ from app.core.database import get_db
 from app.core.seguranca import hash_password
 from app.routers.autenticacao_route import create_access_token
 from app.model.models import (
-    Base,
     AdminUser,
     Order,
     OrderStatus,
@@ -35,6 +34,10 @@ from app.model.models import (
     Restaurant,
     Client,
     CustomerAddress,
+    Food,
+    FoodCategory,
+    MealBox,
+    MealBoxKind,
 )
 
 engine = create_engine(DATABASE_URL)
@@ -401,3 +404,136 @@ def criar_pedido_direto(db, restaurante, cliente, endereco):
         db.refresh(pedido)
         return pedido
     return _criar
+
+
+@pytest.fixture()
+def admin_headers(admin_user, token_para):
+    return {"Authorization": f"Bearer {token_para(admin_user)}"}
+    
+    
+@pytest.fixture()
+def outro_admin_headers(outro_admin_user, token_para):
+    return {"Authorization": f"Bearer {token_para(outro_admin_user)}"}
+    
+    
+# ---------------------------------------------------------------------------
+# Categorias
+# ---------------------------------------------------------------------------
+def _nova_categoria(db, restaurante, nome, tipo="composicao", **extra):
+    c = FoodCategory(restaurant_id=restaurante.id, name=nome, display_order=0, type=tipo, **extra)
+    db.add(c)
+    db.flush()
+    db.refresh(c)
+    return c
+    
+    
+@pytest.fixture()
+def cat_composicao(db, restaurante):
+    return _nova_categoria(db, restaurante, "Carnes")
+    
+    
+@pytest.fixture()
+def cat_composicao_2(db, restaurante):
+    return _nova_categoria(db, restaurante, "Acompanhamentos")
+    
+    
+@pytest.fixture()
+def cat_composicao_inativa(db, restaurante):
+    return _nova_categoria(db, restaurante, "Categoria Inativa", is_active=False)
+    
+    
+@pytest.fixture()
+def cat_venda(db, restaurante):
+    return _nova_categoria(db, restaurante, "Pratos do dia", tipo="venda")
+    
+    
+@pytest.fixture()
+def cat_composicao_b(db, outro_restaurante):
+    return _nova_categoria(db, outro_restaurante, "Carnes do B")
+    
+    
+# ---------------------------------------------------------------------------
+# Alimentos
+# ---------------------------------------------------------------------------
+def _novo_alimento(db, restaurante, nome, categoria=None, **extra):
+    dados = dict(
+        restaurant_id=restaurante.id,
+        name=nome,
+        base_price=Decimal("10.00"),
+        is_active=True,
+        is_available=True,
+    )
+    if categoria is not None:
+        # explicito nos dois campos: nao depende do listener do models.py
+        dados.update(category_id=categoria.id, composition_category_id=categoria.id)
+    dados.update(extra)
+    f = Food(**dados)
+    db.add(f)
+    db.flush()
+    db.refresh(f)
+    return f
+    
+    
+@pytest.fixture()
+def alimento_arroz(db, restaurante, cat_composicao):
+    return _novo_alimento(db, restaurante, "Arroz", cat_composicao)
+    
+    
+@pytest.fixture()
+def alimento_feijao(db, restaurante, cat_composicao_2):
+    return _novo_alimento(db, restaurante, "Feijão", cat_composicao_2)
+    
+    
+@pytest.fixture()
+def alimento_inativo(db, restaurante, cat_composicao):
+    return _novo_alimento(db, restaurante, "Alimento Inativo", cat_composicao, is_active=False)
+    
+    
+@pytest.fixture()
+def alimento_so_venda(db, restaurante, cat_venda):
+    """Avulso puro: so categoria de venda, sem categoria de composicao."""
+    return _novo_alimento(
+        db,
+        restaurante,
+        "Feijoada",
+        categoria=None,
+        sale_category_id=cat_venda.id,
+        is_sellable_alone=True,
+        standalone_price=Decimal("32.90"),
+    )
+    
+    
+@pytest.fixture()
+def alimento_b(db, outro_restaurante, cat_composicao_b):
+    return _novo_alimento(db, outro_restaurante, "Alimento do B", cat_composicao_b)
+    
+    
+# ---------------------------------------------------------------------------
+# Marmitas criadas direto no banco (usadas como insumo dos testes de combo)
+# ---------------------------------------------------------------------------
+def _nova_marmita(db, restaurante, nome, tipo, **extra):
+    m = MealBox(restaurant_id=restaurante.id, name=nome, kind=tipo, price=Decimal("20.00"), **extra)
+    db.add(m)
+    db.flush()
+    db.refresh(m)
+    return m
+    
+    
+@pytest.fixture()
+def marmita_pronta(db, restaurante):
+    return _nova_marmita(db, restaurante, "Marmita Pronta", MealBoxKind.READY)
+    
+    
+@pytest.fixture()
+def marmita_personalizavel(db, restaurante):
+    return _nova_marmita(db, restaurante, "Marmita Personalizável", MealBoxKind.CUSTOMIZABLE)
+    
+    
+@pytest.fixture()
+def marmita_inativa(db, restaurante):
+    return _nova_marmita(db, restaurante, "Marmita Inativa", MealBoxKind.READY, is_active=False)
+    
+    
+@pytest.fixture()
+def marmita_b(db, outro_restaurante):
+    return _nova_marmita(db, outro_restaurante, "Marmita do B", MealBoxKind.READY)
