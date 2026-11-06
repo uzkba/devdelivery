@@ -178,6 +178,10 @@ def atualizar_alimento(
     alimento = get_alimento_por_id(db, alimento_id, restaurant_id)
     dados = payload.model_dump(exclude_unset=True)
 
+    for campo in ("nome", "vendavel_avulso", "destaque", "preco_base"):
+        if dados.get(campo) is None:
+            dados.pop(campo, None)
+    
     if not dados:
         return alimento
 
