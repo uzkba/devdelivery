@@ -203,12 +203,6 @@ class UserInvite(Base):
 # 4. CATALOGO
 # ===========================================================================
 class FoodCategory(Base):
-    """tipo = 'composicao': organiza alimentos usados para montar marmitas
-    (carboidrato, proteina...). tipo = 'venda': organiza produtos vendidos
-    avulsos (pratos, bebidas...). Sao dois tipos separados (RN-C01).
-
-    LEGADO (remover na Fase 2): is_main_dish e a relacao foods."""
-
     __tablename__ = "categoria_alimento"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
@@ -224,6 +218,8 @@ class FoodCategory(Base):
     type: Mapped[str] = mapped_column(
         "tipo", String(20), default="composicao", server_default="composicao", nullable=False
     )
+    group: Mapped[str | None] = mapped_column("grupo", String(10), nullable=True)
+
     # LEGADO (Fase 2)
     is_main_dish: Mapped[bool] = mapped_column(
         "prato_principal", Boolean, default=False, server_default="false", nullable=False
@@ -238,6 +234,8 @@ class FoodCategory(Base):
     __table_args__ = (
         UniqueConstraint("restaurante_id", "nome"),
         CheckConstraint("tipo IN ('composicao', 'venda')", name="ck_categoria_alimento_tipo"),
+        CheckConstraint("grupo IS NULL OR grupo IN ('prato', 'bebida')", name="ck_categoria_alimento_grupo"),
+        CheckConstraint("(tipo = 'venda') = (grupo IS NOT NULL)", name="ck_categoria_alimento_grupo_tipo"),
     )
 
 
@@ -976,3 +974,10 @@ def _food_mirror_composition_on_insert(mapper, connection, target):
 def _food_mirror_composition_on_update(mapper, connection, target):
     if target.sale_category_id is None and sa_inspect(target).attrs.category_id.history.has_changes():
         target.composition_category_id = target.category_id
+
+
+@event.listens_for(FoodCategory, "before_insert")
+def _category_default_group(mapper, connection, target):
+    """Categoria de venda sem grupo informado nasce como 'prato'."""
+    if target.type == "venda" and target.group is None:
+        target.group = "prato"
