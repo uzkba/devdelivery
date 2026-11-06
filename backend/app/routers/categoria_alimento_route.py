@@ -1,14 +1,3 @@
-"""
-app/routers/categoria_alimento_route.py
-
-POST   /categorias
-GET    /categorias?apenas_ativas=&tipo=composicao|venda
-GET    /categorias/{categoria_id}
-PUT    /categorias/{categoria_id}
-DELETE /categorias/{categoria_id}
-
-restaurant_id vem sempre do usuário autenticado.
-"""
 import uuid
 from typing import Literal, Optional
 
@@ -21,6 +10,7 @@ from app.schemas.categoria_alimento_schemas import (
     CategoriaAlimentoCreate,
     CategoriaAlimentoResponse,
     CategoriaAlimentoUpdate,
+    CategoriaAlimentoUpdateResponse,
 )
 from app.services import categoria_alimento_service as service
 
@@ -55,7 +45,7 @@ def buscar_categoria(
     return service.buscar_categoria_por_id(db, current_user.restaurant_id, categoria_id)
 
 
-@router.put("/{categoria_id}", response_model=CategoriaAlimentoResponse)
+@router.put("/{categoria_id}", response_model=CategoriaAlimentoUpdateResponse)
 def atualizar_categoria(
     categoria_id: uuid.UUID,
     dados: CategoriaAlimentoUpdate,

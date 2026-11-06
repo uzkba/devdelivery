@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, List
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ def listar_alimentos(
     categoria_id: Optional[uuid.UUID] = None,
     categoria_venda_id: Optional[uuid.UUID] = None,
     vendavel_avulso: Optional[bool] = None,
+    grupo: Optional[Literal["prato", "bebida"]] = None,
     incluir_inativos: bool = False,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_role("admin")),
@@ -38,6 +39,7 @@ def listar_alimentos(
         incluir_inativos=incluir_inativos,
         vendavel_avulso=vendavel_avulso,
         categoria_venda_id=categoria_venda_id,
+        grupo=grupo,
     )
 
 

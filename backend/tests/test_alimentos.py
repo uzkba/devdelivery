@@ -278,6 +278,52 @@ def test_atualizar_categoria_de_outro_restaurante_da_404(
     assert resp.status_code == 404
 
 
+# ── PUT com null em campo obrigatório (antes dava 500) ───────────
+
+def test_atualizar_nome_null_preserva_o_nome(client, db, categoria, admin_user, token_para):
+    alimento = criar_alimento_direto(db, categoria, name="Nome Original")
+
+    r = client.put(f"/alimentos/{alimento.id}", json={"nome": None}, headers=auth(admin_user, token_para))
+
+    assert r.status_code == 200
+    assert r.json()["nome"] == "Nome Original"
+
+
+def test_atualizar_nome_null_junto_com_outro_campo_aplica_so_o_outro(
+    client, db, categoria, admin_user, token_para
+):
+    alimento = criar_alimento_direto(db, categoria, name="Nome Original")
+
+    r = client.put(
+        f"/alimentos/{alimento.id}",
+        json={"nome": None, "preco_base": "12.00"},
+        headers=auth(admin_user, token_para),
+    )
+
+    assert r.status_code == 200
+    d = r.json()
+    assert d["nome"] == "Nome Original"
+    assert Decimal(d["preco_base"]) == Decimal("12.00")
+
+
+def test_atualizar_vendavel_avulso_null_preserva_o_estado(
+    client, categoria, categoria_venda, admin_user, token_para
+):
+    h = auth(admin_user, token_para)
+    criado = client.post(
+        "/alimentos", json=_payload_avulso(categoria_venda, categoria_id=str(categoria.id)), headers=h
+    )
+    assert criado.status_code == 201
+
+    r = client.put(f"/alimentos/{criado.json()['id']}", json={"vendavel_avulso": None}, headers=h)
+
+    assert r.status_code == 200
+    d = r.json()
+    assert d["vendavel_avulso"] is True
+    assert Decimal(d["preco_avulso"]) == Decimal("32.90")
+    assert d["categoria_venda_id"] == str(categoria_venda.id)
+
+
 # ── DELETE /alimentos/:id ─────────────────────────────────────────
 
 def test_deletar_alimento_e_soft_delete(client, db, categoria, admin_user, token_para):

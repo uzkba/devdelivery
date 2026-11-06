@@ -1,15 +1,3 @@
-"""
-app/services/categoria_alimento_service.py
-
-Regras de negócio do CRUD de categoria de alimento:
-- toda operação é escopada por restaurante (restaurant_id vem do usuário
-  autenticado, nunca do client)
-- nome único por restaurante (case-insensitive), alinhado à
-  UniqueConstraint("restaurante_id", "nome") do model
-- `tipo` (composicao | venda) é definido na criação e não muda
-- delete é soft-delete (ativo=False) e é BLOQUEADO (409) se ainda houver
-  alimento ativo usando a categoria
-"""
 import uuid
 from typing import List, Optional
 
@@ -47,6 +35,7 @@ def criar_categoria(db: Session, restaurant_id: uuid.UUID, dados: CategoriaAlime
         description=dados.descricao,
         display_order=dados.ordem_exibicao,
         type=dados.tipo,
+        group=dados.grupo
     )
     db.add(categoria)
     db.commit()
@@ -82,12 +71,46 @@ def buscar_categoria_por_id(db: Session, restaurant_id: uuid.UUID, categoria_id:
     return categoria
 
 
+_CAMPOS_SO_DE_PRATO = (
+    "serves_people",
+    "prep_time_minutes",
+    "calories_kcal",
+    "protein_g",
+    "carbs_g",
+    "fat_g",
+)
+
+
+def _trocar_grupo(db: Session, categoria: FoodCategory, novo_grupo: str) -> int:
+    """Move todos os itens da categoria de seção. Ao virar 'bebida', limpa os
+    campos que só fazem sentido para prato (serve, preparo, nutrição, 'O que vem').
+    Devolve quantos itens mudaram de seção."""
+    itens = db.query(Food).filter(Food.sale_category_id == categoria.id).all()
+    if novo_grupo == "bebida":
+        for item in itens:
+            for campo in _CAMPOS_SO_DE_PRATO:
+                setattr(item, campo, None)
+            item.components.clear()
+    categoria.group = novo_grupo
+    return len(itens)
+
+
 def atualizar_categoria(
     db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.UUID, dados: CategoriaAlimentoUpdate
 ) -> FoodCategory:
     categoria = buscar_categoria_por_id(db, restaurant_id, categoria_id)
 
     atualizacoes = dados.model_dump(exclude_unset=True)
+
+    itens_movidos = 0
+    if "grupo" in atualizacoes:
+        if categoria.type != "venda":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Apenas categorias de venda possuem grupo.",
+            )
+        if atualizacoes["grupo"] != categoria.group:
+            itens_movidos = _trocar_grupo(db, categoria, atualizacoes["grupo"])
 
     if atualizacoes.get("nome") is not None:
         if _buscar_por_nome(db, restaurant_id, atualizacoes["nome"], excluir_id=categoria_id):
@@ -106,6 +129,7 @@ def atualizar_categoria(
 
     db.commit()
     db.refresh(categoria)
+    categoria.itens_movidos = itens_movidos
     return categoria
 
 
@@ -134,3 +158,28 @@ def remover_categoria(db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.
     db.commit()
     db.refresh(categoria)
     return categoria
+
+
+CATEGORIAS_INICIAIS = (
+    ("Pratos", "prato", 0),
+    ("Sobremesas", "prato", 1),
+    ("Bebidas", "bebida", 2),
+)
+
+
+def criar_categorias_iniciais(db: Session, restaurant_id: uuid.UUID) -> List[FoodCategory]:
+    criadas: List[FoodCategory] = []
+    for nome, grupo, ordem in CATEGORIAS_INICIAIS:
+        if _buscar_por_nome(db, restaurant_id, nome):
+            continue
+        categoria = FoodCategory(
+            restaurant_id=restaurant_id,
+            name=nome,
+            display_order=ordem,
+            type="venda",
+            group=grupo,
+        )
+        db.add(categoria)
+        criadas.append(categoria)
+    db.flush()
+    return criadas
