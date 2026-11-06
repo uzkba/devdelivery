@@ -1,15 +1,3 @@
-"""
-app/services/categoria_alimento_service.py
-
-Regras de negócio do CRUD de categoria de alimento:
-- toda operação é escopada por restaurante (restaurant_id vem do usuário
-  autenticado, nunca do client)
-- nome único por restaurante (case-insensitive), alinhado à
-  UniqueConstraint("restaurante_id", "nome") do model
-- `tipo` (composicao | venda) é definido na criação e não muda
-- delete é soft-delete (ativo=False) e é BLOQUEADO (409) se ainda houver
-  alimento ativo usando a categoria
-"""
 import uuid
 from typing import List, Optional
 
@@ -170,3 +158,28 @@ def remover_categoria(db: Session, restaurant_id: uuid.UUID, categoria_id: uuid.
     db.commit()
     db.refresh(categoria)
     return categoria
+
+
+CATEGORIAS_INICIAIS = (
+    ("Pratos", "prato", 0),
+    ("Sobremesas", "prato", 1),
+    ("Bebidas", "bebida", 2),
+)
+
+
+def criar_categorias_iniciais(db: Session, restaurant_id: uuid.UUID) -> List[FoodCategory]:
+    criadas: List[FoodCategory] = []
+    for nome, grupo, ordem in CATEGORIAS_INICIAIS:
+        if _buscar_por_nome(db, restaurant_id, nome):
+            continue
+        categoria = FoodCategory(
+            restaurant_id=restaurant_id,
+            name=nome,
+            display_order=ordem,
+            type="venda",
+            group=grupo,
+        )
+        db.add(categoria)
+        criadas.append(categoria)
+    db.flush()
+    return criadas
