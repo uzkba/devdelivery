@@ -547,3 +547,21 @@ def combo_teste(db, restaurante):
     db.flush()
     db.refresh(combo)
     return combo
+
+
+@pytest.fixture()
+def cat_venda_bebida(db, restaurante):
+    return _nova_categoria(db, restaurante, "Bebidas", tipo="venda", group="bebida")
+
+
+@pytest.fixture()
+def alimento_bebida(db, restaurante, cat_venda_bebida):
+    return _novo_alimento(
+        db,
+        restaurante,
+        "Suco de laranja",
+        categoria=None,
+        sale_category_id=cat_venda_bebida.id,
+        is_sellable_alone=True,
+        standalone_price=Decimal("8.00"),
+    )
