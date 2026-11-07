@@ -264,7 +264,7 @@ class Food(Base):
         "destaque", Boolean, default=False, server_default="false", nullable=False
     )
     image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))  # upload: Fase 5
-
+    sold_out_on: Mapped[date | None] = mapped_column("esgotado_em", Date, nullable=True)
     serves_people: Mapped[int | None] = mapped_column("serve_pessoas", Integer)
     portion_amount: Mapped[Decimal | None] = mapped_column("porcao_quantidade", Numeric(8, 2))
     portion_unit: Mapped[str | None] = mapped_column("porcao_unidade", String(2))
@@ -382,11 +382,12 @@ class MealBox(TimestampMixin, Base):
         Enum(MealBoxKind, name="tipo_marmita", values_callable=lambda e: [m.value for m in e]),
         nullable=False,
     )
-    size: Mapped[str | None] = mapped_column("tamanho", String(40))  # opcional
+    size: Mapped[str | None] = mapped_column("tamanho", String(40))
     price: Mapped[Decimal] = mapped_column("preco", Numeric(10, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
     is_featured: Mapped[bool] = mapped_column("destaque", Boolean, default=False, server_default="false", nullable=False)
-    image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))  # upload: Fase 5
+    image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))
+    sold_out_on: Mapped[date | None] = mapped_column("esgotado_em", Date, nullable=True)
 
     # Informacao nutricional opcional (cada restaurante decide se informa)
     calories_kcal: Mapped[int | None] = mapped_column("calorias_kcal", Integer)
@@ -488,6 +489,7 @@ class Combo(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, server_default="true", nullable=False)
     is_featured: Mapped[bool] = mapped_column("destaque", Boolean, default=False, server_default="false", nullable=False)
     image_url: Mapped[str | None] = mapped_column("imagem_url", String(500))
+    sold_out_on: Mapped[date | None] = mapped_column("esgotado_em", Date, nullable=True)
 
     meal_box_items: Mapped[list["ComboMealBoxItem"]] = relationship(
         back_populates="combo",

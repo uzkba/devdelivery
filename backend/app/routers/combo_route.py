@@ -1,15 +1,15 @@
-"""NexusDelivery - Fase 1: rotas admin de combo (/admin/combos)."""
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.depedencias import require_role  # AJUSTE: modulo onde esta require_role
+from app.api.depedencias import require_role
+from app.model.models import Combo
 from app.schemas.autenticacao_schemas import AuthenticatedUser
 from app.schemas.combo_schemas import ComboIn, ComboListOut, ComboOut
 from app.schemas.marmita_schemas import AtivoIn
-from app.services import combo_service as service
+from app.services import combo_service as service, disponibilidade_service as disponibilidade
 
 router = APIRouter(prefix="/admin/combos", tags=["Admin - Combos"])
 
@@ -22,7 +22,8 @@ def criar_combo(
     db: Session = Depends(get_db),
     admin: AuthenticatedUser = Depends(require_admin),
 ):
-    return service.create_combo(db, admin.restaurant_id, payload)
+    combo = service.create_combo(db, admin.restaurant_id, payload)
+    return disponibilidade.anotar_um(db, combo)
 
 
 @router.get("", response_model=ComboListOut)
@@ -42,6 +43,7 @@ def listar_combos(
         limit=limite,
         offset=deslocamento,
     )
+    disponibilidade.anotar_estado_hoje(db, Combo, items)
     return {"itens": items, "total": total}
 
 
@@ -51,7 +53,8 @@ def buscar_combo(
     db: Session = Depends(get_db),
     admin: AuthenticatedUser = Depends(require_admin),
 ):
-    return service.get_combo(db, admin.restaurant_id, combo_id)
+    combo = service.get_combo(db, admin.restaurant_id, combo_id)
+    return disponibilidade.anotar_um(db, combo)
 
 
 @router.put("/{combo_id}", response_model=ComboOut)
@@ -61,7 +64,8 @@ def atualizar_combo(
     db: Session = Depends(get_db),
     admin: AuthenticatedUser = Depends(require_admin),
 ):
-    return service.update_combo(db, admin.restaurant_id, combo_id, payload)
+    combo = service.update_combo(db, admin.restaurant_id, combo_id, payload)
+    return disponibilidade.anotar_um(db, combo)
 
 
 @router.patch("/{combo_id}/ativo", response_model=ComboOut)
@@ -71,7 +75,8 @@ def alternar_combo_ativo(
     db: Session = Depends(get_db),
     admin: AuthenticatedUser = Depends(require_admin),
 ):
-    return service.set_combo_active(db, admin.restaurant_id, combo_id, payload.ativo)
+    combo = service.set_combo_active(db, admin.restaurant_id, combo_id, payload.ativo)
+    return disponibilidade.anotar_um(db, combo)
 
 
 @router.delete("/{combo_id}", status_code=status.HTTP_204_NO_CONTENT)

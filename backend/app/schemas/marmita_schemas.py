@@ -111,6 +111,8 @@ class MarmitaResumoOut(_Out):
     ativo: bool = Field(validation_alias="is_active")
     destaque: bool = Field(validation_alias="is_featured")
     imagem_url: str | None = Field(default=None, validation_alias="image_url")
+    serve_hoje: bool = Field(validation_alias="serves_today")
+    esgotado_hoje: bool = Field(validation_alias="sold_out_today")
 
 
 class MarmitaOut(MarmitaResumoOut):

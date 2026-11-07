@@ -200,7 +200,6 @@ class AlimentoOut(BaseModel):
     ativo: bool = Field(validation_alias="is_active")
     disponivel: bool = Field(validation_alias="is_available")
     grupos_complemento: List[ModifierGroupOut] = Field(default=[], validation_alias="modifier_groups")
-
     serve_pessoas: Optional[int] = Field(default=None, validation_alias="serves_people")
     porcao_quantidade: Optional[Decimal] = Field(default=None, validation_alias="portion_amount")
     porcao_unidade: Optional[UnidadePorcao] = Field(default=None, validation_alias="portion_unit")
@@ -210,3 +209,5 @@ class AlimentoOut(BaseModel):
     carboidrato_g: Optional[Decimal] = Field(default=None, validation_alias="carbs_g")
     gordura_g: Optional[Decimal] = Field(default=None, validation_alias="fat_g")
     componentes: List[ComponenteOut] = Field(default=[], validation_alias="components")
+    serve_hoje: bool = Field(validation_alias="serves_today")
+    esgotado_hoje: bool = Field(validation_alias="sold_out_today")

@@ -73,9 +73,10 @@ class ComboResumoOut(_Out):
     ativo: bool = Field(validation_alias="is_active")
     destaque: bool = Field(validation_alias="is_featured")
     imagem_url: str | None = Field(default=None, validation_alias="image_url")
-    # avisos para o admin
     possui_marmita_personalizavel: bool = Field(validation_alias="has_customizable_meal_box")
     possui_item_inativo: bool = Field(validation_alias="has_inactive_items")
+    serve_hoje: bool = Field(validation_alias="serves_today")
+    esgotado_hoje: bool = Field(validation_alias="sold_out_today")
 
 
 class ComboOut(ComboResumoOut):
