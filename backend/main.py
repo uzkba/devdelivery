@@ -16,6 +16,7 @@ from app.routers import (
     relatorio_route,
     admin_cardapio_route,
     restaurante_route,
+    disponibilidade_route,
 )
 
 app = FastAPI(
@@ -48,6 +49,9 @@ app.include_router(admin_cardapio_route.router)
 app.include_router(restaurante_route.router)
 app.include_router(marmita_route.router)
 app.include_router(combo_route.router)
+
+for _router in disponibilidade_route.routers:
+    app.include_router(_router)
 
 @app.get("/health")
 def health_check():

@@ -1,5 +1,4 @@
 from datetime import date
-from decimal import Decimal
 
 import pytest
 
@@ -18,15 +17,6 @@ SEXTA = date(2026, 11, 6)  # weekday 4
 SABADO = date(2026, 11, 7)  # weekday 5
 
 ATRIBUTO = {MealBox: "meal_box_id", Combo: "combo_id", Food: "food_id"}
-
-
-@pytest.fixture()
-def combo_teste(db, restaurante):
-    combo = Combo(restaurant_id=restaurante.id, name="Combo Teste", price=Decimal("30.00"))
-    db.add(combo)
-    db.flush()
-    db.refresh(combo)
-    return combo
 
 
 @pytest.fixture(params=["marmita_pronta", "alimento_arroz", "combo_teste"])

@@ -38,6 +38,7 @@ from app.model.models import (
     FoodCategory,
     MealBox,
     MealBoxKind,
+    Combo,
 )
 
 engine = create_engine(DATABASE_URL)
@@ -537,3 +538,12 @@ def marmita_inativa(db, restaurante):
 @pytest.fixture()
 def marmita_b(db, outro_restaurante):
     return _nova_marmita(db, outro_restaurante, "Marmita do B", MealBoxKind.READY)
+
+
+@pytest.fixture()
+def combo_teste(db, restaurante):
+    combo = Combo(restaurant_id=restaurante.id, name="Combo Teste", price=Decimal("30.00"))
+    db.add(combo)
+    db.flush()
+    db.refresh(combo)
+    return combo
