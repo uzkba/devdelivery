@@ -48,7 +48,17 @@ class SecaoOut(BaseModel):
     categorias: list[CategoriaSecaoOut]
 
 
+class ItemVitrineOut(BaseModel):
+    tipo: Literal["marmita", "combo", "produto"]
+    id: uuid.UUID
+    nome: str
+    preco: Decimal
+    imagem_url: str | None = None
+
+
 class CardapioHomeOut(BaseModel):
+    destaques: list[ItemVitrineOut]
+    mais_pedidos: list[ItemVitrineOut]
     marmitas: list[MarmitaCardOut]
     combos: list[ComboCardOut]
     secoes: list[SecaoOut]

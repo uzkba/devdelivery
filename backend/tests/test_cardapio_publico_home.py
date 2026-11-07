@@ -41,7 +41,13 @@ def _combo_com(db, restaurante, marmita, preco="30.00", quantidade=2):
 
 # ------------------------------ geral ------------------------------
 def test_restaurante_sem_itens_devolve_listas_vazias(client, restaurante):
-    assert _get(client, restaurante.id) == {"marmitas": [], "combos": [], "secoes": []}
+        assert _get(client, restaurante.id) == {
+        "destaques": [],
+        "mais_pedidos": [],
+        "marmitas": [],
+        "combos": [],
+        "secoes": [],
+    }
 
 
 def test_restaurante_inexistente_da_404(client):

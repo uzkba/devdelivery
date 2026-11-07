@@ -1,16 +1,22 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.tempo import hoje_local
-from app.model.models import Combo, Food, FoodCategory, MealBox
+from app.model.models import Combo, Food, FoodCategory, MealBox, Order, OrderItem, OrderStatus
 from app.services import disponibilidade_service as disponibilidade
 
 _CENTAVOS = Decimal("0.01")
 GRUPOS = ("prato", "bebida")
+
+FUSO_LOCAL = ZoneInfo("America/Sao_Paulo")  # mesmo fuso de app/core/tempo.py
+DIAS_MAIS_PEDIDOS = 30
+LIMITE_MAIS_PEDIDOS = 5
+STATUS_IGNORADOS = ("CANCELADO", "RECUSADO")
 
 
 def preco_referencia_combo(combo: Combo) -> Decimal | None:
@@ -132,10 +138,94 @@ def _secoes(db: Session, restaurant_id: uuid.UUID, hoje: date) -> list[dict]:
     ]
 
 
+# ------------------------- destaques e mais pedidos -------------------------
+def _itens_vitrine(marmitas: list[dict], combos: list[dict], produtos: list[dict]) -> list[tuple[str, dict]]:
+    pares = (("marmita", marmitas), ("combo", combos), ("produto", produtos))
+    return [(tipo, item) for tipo, itens in pares for item in itens]
+
+
+def _card(tipo: str, item: dict) -> dict:
+    return {
+        "tipo": tipo,
+        "id": item["id"],
+        "nome": item["nome"],
+        "preco": item["preco"],
+        "imagem_url": item["imagem_url"],
+    }
+
+
+def _destaques(itens: list[tuple[str, dict]]) -> list[dict]:
+    return [_card(tipo, item) for tipo, item in itens if item["destaque"]]
+
+
+def _inicio_da_janela(hoje: date) -> datetime:
+    """Meia-noite local de (hoje - 30 dias), em UTC sem fuso, como order_datetime."""
+    inicio_local = datetime.combine(
+        hoje - timedelta(days=DIAS_MAIS_PEDIDOS), time.min, tzinfo=FUSO_LOCAL
+    )
+    return inicio_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _contagem_ultimos_dias(
+    db: Session, restaurant_id: uuid.UUID, hoje: date
+) -> dict[tuple[str, uuid.UUID], int]:
+    """Linhas de pedido_item por item nos ultimos 30 dias, sem pedidos cancelados."""
+    linhas = db.execute(
+        select(OrderItem.food_id, OrderItem.meal_box_id, OrderItem.combo_id, func.count())
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(OrderStatus, Order.status_id == OrderStatus.id)
+        .where(
+            Order.restaurant_id == restaurant_id,
+            Order.order_datetime >= _inicio_da_janela(hoje),
+            OrderStatus.code.not_in(STATUS_IGNORADOS),
+        )
+        .group_by(OrderItem.food_id, OrderItem.meal_box_id, OrderItem.combo_id)
+    ).all()
+
+    contagem: dict[tuple[str, uuid.UUID], int] = {}
+    for food_id, meal_box_id, combo_id, total in linhas:
+        if food_id is not None:
+            chave = ("produto", food_id)
+        elif meal_box_id is not None:
+            chave = ("marmita", meal_box_id)
+        elif combo_id is not None:
+            chave = ("combo", combo_id)
+        else:
+            continue
+        contagem[chave] = contagem.get(chave, 0) + total
+    return contagem
+
+
+def _mais_pedidos(
+    itens: list[tuple[str, dict]], contagem: dict[tuple[str, uuid.UUID], int]
+) -> list[dict]:
+    """Os mais pedidos entre os itens VISIVEIS da Home (desempate por nome)."""
+    ranking = sorted(
+        (
+            (contagem[(tipo, item["id"])], tipo, item)
+            for tipo, item in itens
+            if (tipo, item["id"]) in contagem
+        ),
+        key=lambda r: (-r[0], r[2]["nome"]),
+    )
+    return [_card(tipo, item) for _, tipo, item in ranking[:LIMITE_MAIS_PEDIDOS]]
+
+
 def montar_home(db: Session, restaurant_id: uuid.UUID, hoje: date | None = None) -> dict:
     hoje = hoje or hoje_local()
+    marmitas = _marmitas(db, restaurant_id, hoje)
+    combos = _combos(db, restaurant_id, hoje)
+    secoes = _secoes(db, restaurant_id, hoje)
+
+    produtos = [i for s in secoes for c in s["categorias"] for i in c["itens"]]
+    itens = _itens_vitrine(marmitas, combos, produtos)
+    contagem = _contagem_ultimos_dias(db, restaurant_id, hoje)
+
     return {
-        "marmitas": _marmitas(db, restaurant_id, hoje),
-        "combos": _combos(db, restaurant_id, hoje),
-        "secoes": _secoes(db, restaurant_id, hoje),
+        "destaques": _destaques(itens),
+        "mais_pedidos": _mais_pedidos(itens, contagem),
+        "marmitas": marmitas,
+        "combos": combos,
+        "secoes": secoes,
     }
