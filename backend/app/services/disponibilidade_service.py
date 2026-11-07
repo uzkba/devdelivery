@@ -93,12 +93,30 @@ def estado_hoje(db: Session, alvo: Alvo, hoje: date | None = None) -> EstadoDisp
 
 
 # ---------------------------- leitura e escrita (admin) ----------------------------
+def anotar_estado_hoje(
+    db: Session, modelo: type, objetos: Iterable[Alvo], hoje: date | None = None
+) -> list[Alvo]:
+    objetos = list(objetos)
+    if not objetos:
+        return objetos
+    hoje = hoje or hoje_local()
+    servem = servem_hoje(db, modelo, [o.id for o in objetos], hoje)
+    for objeto in objetos:
+        objeto.serves_today = objeto.id in servem
+        objeto.sold_out_today = esgotado_hoje(objeto, hoje)
+    return objetos
+
+
+def anotar_um(db: Session, objeto: Alvo, hoje: date | None = None) -> Alvo:
+    anotar_estado_hoje(db, type(objeto), [objeto], hoje)
+    return objeto
+
+
 def _coluna(tabela, alvo: Alvo):
     return getattr(tabela, _ATRIBUTO_ALVO[type(alvo)])
 
 
 def ler_disponibilidade(db: Session, alvo: Alvo, hoje: date | None = None) -> dict:
-    """Regra semanal, excecoes de hoje em diante e estados de hoje."""
     hoje = hoje or hoje_local()
     regra = db.scalar(select(AvailabilityRule).where(_coluna(AvailabilityRule, alvo) == alvo.id))
     personalizado = regra is not None and regra.mode == MODO_PERSONALIZADO
