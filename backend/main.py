@@ -17,6 +17,7 @@ from app.routers import (
     admin_cardapio_route,
     restaurante_route,
     disponibilidade_route,
+    cardapio_publico_route,
 )
 
 app = FastAPI(
@@ -49,6 +50,7 @@ app.include_router(admin_cardapio_route.router)
 app.include_router(restaurante_route.router)
 app.include_router(marmita_route.router)
 app.include_router(combo_route.router)
+app.include_router(cardapio_publico_route.router)
 
 for _router in disponibilidade_route.routers:
     app.include_router(_router)
