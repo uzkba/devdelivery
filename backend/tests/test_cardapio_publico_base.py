@@ -63,14 +63,22 @@ def test_item_sem_preco_avulso_esconde_referencia(db, restaurante, marmita_pront
 
 # ------------------------- get_restaurante_publico -------------------------
 def test_restaurante_ativo_e_devolvido(db, restaurante):
-    assert get_restaurante_publico(restaurante.id, db).id == restaurante.id
+    assert get_restaurante_publico(restaurante.slug, db).id == restaurante.id
+
+
+def test_slug_nao_diferencia_maiusculas(db, restaurante):
+    assert get_restaurante_publico(restaurante.slug.upper(), db).id == restaurante.id
 
 
 def test_restaurante_inexistente_da_404(db):
-    import uuid
-
     with pytest.raises(HTTPException) as erro:
-        get_restaurante_publico(uuid.uuid4(), db)
+        get_restaurante_publico("nao-existe", db)
+    assert erro.value.status_code == 404
+
+
+def test_uuid_no_lugar_do_slug_da_404(db, restaurante):
+    with pytest.raises(HTTPException) as erro:
+        get_restaurante_publico(str(restaurante.id), db)
     assert erro.value.status_code == 404
 
 
@@ -78,5 +86,5 @@ def test_restaurante_inativo_da_404(db, restaurante):
     restaurante.is_active = False
     db.flush()
     with pytest.raises(HTTPException) as erro:
-        get_restaurante_publico(restaurante.id, db)
+        get_restaurante_publico(restaurante.slug, db)
     assert erro.value.status_code == 404
