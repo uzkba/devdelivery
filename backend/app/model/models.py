@@ -52,6 +52,8 @@ class Restaurant(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     trade_name: Mapped[str] = mapped_column("nome_fantasia", String(150), nullable=False)
+    # Link publico do cardapio (minusculo, so a-z, 0-9 e hifen)
+    slug: Mapped[str] = mapped_column("slug", String(60), nullable=False)
     cnpj: Mapped[str | None] = mapped_column("cnpj", String(18), unique=True)
     phone: Mapped[str | None] = mapped_column("telefone", String(20))
     # Endereco exibido ao cliente (Ajustes > Dados e horarios)
@@ -69,6 +71,14 @@ class Restaurant(Base):
         back_populates="restaurant",
         cascade="all, delete-orphan",
         order_by="[RestaurantHours.weekday, RestaurantHours.opens_at]",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_restaurante_slug"),
+        CheckConstraint(
+            "slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(slug) BETWEEN 3 AND 60",
+            name="ck_restaurante_slug",
+        ),
     )
 
 
