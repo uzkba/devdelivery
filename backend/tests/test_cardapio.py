@@ -142,7 +142,11 @@ class TestAlterarDisponibilidade:
 
 class TestCardapioDoDia:
     def test_lista_apenas_itens_disponiveis(self, db, client):
-        restaurante_padrao = Restaurant(id=RESTAURANTE_ID_PADRAO, trade_name="Restaurante Placeholder")
+        restaurante_padrao = Restaurant(
+            id=RESTAURANTE_ID_PADRAO,
+            trade_name="Restaurante Placeholder",
+            slug="restaurante-placeholder",
+        )
         db.add(restaurante_padrao)
         db.flush()
 

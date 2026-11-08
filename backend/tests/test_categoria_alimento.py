@@ -23,7 +23,7 @@ from app.model.models import AdminUser, Restaurant
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def outro_restaurante(db):
-    r = Restaurant(trade_name="Marmitas do Zé")
+    r = Restaurant(trade_name="Marmitas do Zé", slug="marmitas-do-ze-categoria")
     db.add(r)
     db.flush()
     db.refresh(r)
