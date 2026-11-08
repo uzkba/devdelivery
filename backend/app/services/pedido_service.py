@@ -19,6 +19,7 @@ from app.model.models import (
 )
 from app.api.depedencias import AuthenticatedClient
 from app.utils.geo import calcular_distancia_km
+from app.services.estado_restaurante_service import garantir_aceita_pedidos
 
 
 def _buscar_status_inicial(db: Session) -> OrderStatus:
@@ -203,6 +204,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     forma_pagamento = _buscar_forma_pagamento(db, payload.forma_pagamento)
     _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
     restaurante = _buscar_restaurante(db, payload.restaurante_id)
+    garantir_aceita_pedidos(db, restaurante)
     config_entrega = _buscar_configuracao_entrega(db, payload.restaurante_id)
     delivery_fee = _calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
 

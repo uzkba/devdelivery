@@ -65,8 +65,13 @@ class Restaurant(Base):
     latitude: Mapped[Decimal | None] = mapped_column("latitude", Numeric(10, 8))
     longitude: Mapped[Decimal | None] = mapped_column("longitude", Numeric(11, 8))
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
+    is_paused: Mapped[bool] = mapped_column(
+        "pausado", Boolean, default=False, server_default="false", nullable=False
+    )
+    paused_until: Mapped[datetime | None] = mapped_column(
+        "pausado_ate", DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-
     hours: Mapped[list["RestaurantHours"]] = relationship(
         back_populates="restaurant",
         cascade="all, delete-orphan",

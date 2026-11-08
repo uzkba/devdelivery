@@ -6,13 +6,19 @@ from app.model.models import (
     DeliveryRuleNeighborhood,
     Restaurant,
     RestaurantDeliverySettings,
+    RestaurantHours,
 )
 from app.schemas.restaurante_publico_schemas import (
     EnderecoPublicoOut,
     EntregaPublicaOut,
+    EstadoOperacaoOut,
+    FaixaHorarioOut,
+    HorarioDiaOut,
+    ProximaAberturaOut,
     RestaurantePublicoOut,
     TaxaEntregaOut,
 )
+from app.services import estado_restaurante_service as estado_service
 
 
 def _montar_taxa(
@@ -40,6 +46,37 @@ def _montar_taxa(
     return taxa
 
 
+def _hhmm(valor) -> str:
+    return valor.strftime("%H:%M")
+
+
+def _montar_horarios(faixas: list[RestaurantHours]) -> list[HorarioDiaOut]:
+    por_dia: dict[int, list[FaixaHorarioOut]] = {dia: [] for dia in range(7)}
+    for faixa in faixas:
+        por_dia[faixa.weekday].append(
+            FaixaHorarioOut(abre_as=_hhmm(faixa.opens_at), fecha_as=_hhmm(faixa.closes_at))
+        )
+    return [HorarioDiaOut(dia_semana=dia, faixas=por_dia[dia]) for dia in range(7)]
+
+
+def _montar_estado(estado: estado_service.EstadoOperacao) -> EstadoOperacaoOut:
+    proxima = None
+    if estado.proxima_abertura is not None:
+        proxima = ProximaAberturaOut(
+            em_dias=estado.proxima_abertura.em_dias,
+            dia_semana=estado.proxima_abertura.dia_semana,
+            abre_as=_hhmm(estado.proxima_abertura.abre_as),
+        )
+    return EstadoOperacaoOut(
+        estado=estado.estado,
+        aceita_pedidos=estado.aceita_pedidos,
+        horario_definido=estado.horario_definido,
+        motivo=estado.motivo,
+        pausado_ate=estado.pausado_ate,
+        proxima_abertura=proxima,
+    )
+
+
 def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> RestaurantePublicoOut:
     config = (
         db.query(RestaurantDeliverySettings)
@@ -58,6 +95,9 @@ def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> Restaura
             taxa=_montar_taxa(db, restaurante, config),
         )
 
+    faixas = estado_service.buscar_faixas(db, restaurante.id)
+    estado = estado_service.buscar_estado(db, restaurante)
+
     return RestaurantePublicoOut(
         slug=restaurante.slug,
         nome=restaurante.trade_name,
@@ -68,5 +108,7 @@ def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> Restaura
             bairro=restaurante.neighborhood,
             cidade=restaurante.city,
         ),
+        estado=_montar_estado(estado),
+        horarios=_montar_horarios(faixas),
         entrega=entrega,
     )

@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -27,9 +28,36 @@ class EntregaPublicaOut(BaseModel):
     taxa: TaxaEntregaOut
 
 
+class FaixaHorarioOut(BaseModel):
+    abre_as: str  # "HH:MM"
+    fecha_as: str  # "HH:MM"
+
+
+class HorarioDiaOut(BaseModel):
+    dia_semana: int  # 0 = segunda ... 6 = domingo
+    faixas: list[FaixaHorarioOut]  # lista vazia = fechado nesse dia
+
+
+class ProximaAberturaOut(BaseModel):
+    em_dias: int  # 0 = hoje, 1 = amanha ...
+    dia_semana: int
+    abre_as: str
+
+
+class EstadoOperacaoOut(BaseModel):
+    estado: str  # ABERTO | PAUSADO | FECHADO
+    aceita_pedidos: bool
+    horario_definido: bool
+    motivo: Optional[str] = None
+    pausado_ate: Optional[datetime] = None
+    proxima_abertura: Optional[ProximaAberturaOut] = None
+
+
 class RestaurantePublicoOut(BaseModel):
     slug: str
     nome: str
     telefone: Optional[str] = None
     endereco: EnderecoPublicoOut
+    estado: EstadoOperacaoOut
+    horarios: list[HorarioDiaOut]
     entrega: Optional[EntregaPublicaOut] = None
