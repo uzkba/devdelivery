@@ -17,8 +17,8 @@ def _hoje_fixo(monkeypatch):
     monkeypatch.setattr(svc, "hoje_local", lambda: HOJE)
 
 
-def _home(client, restaurante_id):
-    resposta = client.get(f"/restaurantes/{restaurante_id}/cardapio")
+def _home(client, slug):
+    resposta = client.get(f"/restaurantes/{slug}/cardapio")
     assert resposta.status_code == 200
     return resposta.json()
 
@@ -52,7 +52,7 @@ def pedir(db, criar_pedido_direto, status_criado, forma_pagamento_dinheiro):
 
 # ------------------------------ destaques ------------------------------
 def test_sem_destaque_a_lista_vem_vazia(client, restaurante, marmita_pronta):
-    assert _home(client, restaurante.id)["destaques"] == []
+    assert _home(client, restaurante.slug)["destaques"] == []
 
 
 def test_destaques_trazem_os_tres_tipos_nessa_ordem(
@@ -63,7 +63,7 @@ def test_destaques_trazem_os_tres_tipos_nessa_ordem(
     alimento_so_venda.is_featured = True
     db.flush()
 
-    destaques = _home(client, restaurante.id)["destaques"]
+    destaques = _home(client, restaurante.slug)["destaques"]
     assert [(d["tipo"], d["id"]) for d in destaques] == [
         ("marmita", str(marmita_pronta.id)),
         ("combo", str(combo_teste.id)),
@@ -76,7 +76,7 @@ def test_destaque_esgotado_hoje_nao_aparece(db, client, restaurante, marmita_pro
     marmita_pronta.is_featured = True
     marmita_pronta.sold_out_on = HOJE
     db.flush()
-    assert _home(client, restaurante.id)["destaques"] == []
+    assert _home(client, restaurante.slug)["destaques"] == []
 
 
 # ------------------------------ mais pedidos ------------------------------
@@ -89,7 +89,7 @@ def test_mais_pedidos_ordena_por_quantidade_de_itens(
         pedir(meal_box_id=marmita_pronta.id)
     pedir(food_id=alimento_bebida.id)
 
-    mais = _home(client, restaurante.id)["mais_pedidos"]
+    mais = _home(client, restaurante.slug)["mais_pedidos"]
     assert [(m["tipo"], m["id"]) for m in mais] == [
         ("produto", str(alimento_so_venda.id)),
         ("marmita", str(marmita_pronta.id)),
@@ -104,7 +104,7 @@ def test_pedido_cancelado_nao_conta(
     for _ in range(2):
         pedir(status=status_cancelado, food_id=alimento_bebida.id)
 
-    assert _ids(_home(client, restaurante.id)["mais_pedidos"]) == [str(alimento_so_venda.id)]
+    assert _ids(_home(client, restaurante.slug)["mais_pedidos"]) == [str(alimento_so_venda.id)]
 
 
 def test_so_conta_os_ultimos_30_dias(client, restaurante, pedir, alimento_so_venda, alimento_bebida):
@@ -112,19 +112,19 @@ def test_so_conta_os_ultimos_30_dias(client, restaurante, pedir, alimento_so_ven
         pedir(quando=FORA_DA_JANELA, food_id=alimento_so_venda.id)
     pedir(quando=NA_JANELA, food_id=alimento_bebida.id)
 
-    assert _ids(_home(client, restaurante.id)["mais_pedidos"]) == [str(alimento_bebida.id)]
+    assert _ids(_home(client, restaurante.slug)["mais_pedidos"]) == [str(alimento_bebida.id)]
 
 
 def test_item_esgotado_hoje_sai_de_mais_pedidos(db, client, restaurante, pedir, alimento_so_venda):
     pedir(food_id=alimento_so_venda.id)
     alimento_so_venda.sold_out_on = HOJE
     db.flush()
-    assert _home(client, restaurante.id)["mais_pedidos"] == []
+    assert _home(client, restaurante.slug)["mais_pedidos"] == []
 
 
 def test_alimento_de_composicao_pedido_no_legado_nao_aparece(client, restaurante, pedir, alimento_arroz):
     pedir(food_id=alimento_arroz.id)
-    assert _home(client, restaurante.id)["mais_pedidos"] == []
+    assert _home(client, restaurante.slug)["mais_pedidos"] == []
 
 
 def test_mais_pedidos_tem_no_maximo_cinco(db, client, restaurante, pedir):
@@ -139,7 +139,7 @@ def test_mais_pedidos_tem_no_maximo_cinco(db, client, restaurante, pedir):
         db.flush()
         pedir(meal_box_id=caixa.id)
 
-    assert len(_home(client, restaurante.id)["mais_pedidos"]) == 5
+    assert len(_home(client, restaurante.slug)["mais_pedidos"]) == 5
 
 
 def test_pedidos_de_outro_restaurante_nao_contam(
@@ -147,5 +147,5 @@ def test_pedidos_de_outro_restaurante_nao_contam(
 ):
     pedir(restaurant_id=outro_restaurante.id, meal_box_id=marmita_b.id)
 
-    assert _ids(_home(client, outro_restaurante.id)["mais_pedidos"]) == [str(marmita_b.id)]
-    assert _home(client, restaurante.id)["mais_pedidos"] == []
+    assert _ids(_home(client, outro_restaurante.slug)["mais_pedidos"]) == [str(marmita_b.id)]
+    assert _home(client, restaurante.slug)["mais_pedidos"] == []

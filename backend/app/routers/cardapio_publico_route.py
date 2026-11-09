@@ -18,18 +18,15 @@ from app.services import detalhe_publico_service as detalhes
 router = APIRouter(tags=["Cardápio público"])
 
 
-@router.get("/restaurantes/{restaurante_id}/cardapio", response_model=CardapioHomeOut)
+@router.get("/restaurantes/{slug}/cardapio", response_model=CardapioHomeOut)
 def cardapio_home(
     restaurante: Restaurant = Depends(get_restaurante_publico),
     db: Session = Depends(get_db),
 ):
-    """Home do cliente. Rota publica (sem autenticacao)."""
     return service.montar_home(db, restaurante.id)
 
 
-@router.get(
-    "/restaurantes/{restaurante_id}/marmitas/{marmita_id}", response_model=MarmitaDetalheOut
-)
+@router.get("/restaurantes/{slug}/marmitas/{marmita_id}", response_model=MarmitaDetalheOut)
 def detalhe_marmita(
     marmita_id: uuid.UUID,
     restaurante: Restaurant = Depends(get_restaurante_publico),
@@ -38,7 +35,7 @@ def detalhe_marmita(
     return detalhes.detalhar_marmita(db, restaurante.id, marmita_id)
 
 
-@router.get("/restaurantes/{restaurante_id}/combos/{combo_id}", response_model=ComboDetalheOut)
+@router.get("/restaurantes/{slug}/combos/{combo_id}", response_model=ComboDetalheOut)
 def detalhe_combo(
     combo_id: uuid.UUID,
     restaurante: Restaurant = Depends(get_restaurante_publico),
@@ -47,9 +44,7 @@ def detalhe_combo(
     return detalhes.detalhar_combo(db, restaurante.id, combo_id)
 
 
-@router.get(
-    "/restaurantes/{restaurante_id}/produtos/{produto_id}", response_model=ProdutoDetalheOut
-)
+@router.get("/restaurantes/{slug}/produtos/{produto_id}", response_model=ProdutoDetalheOut)
 def detalhe_produto(
     produto_id: uuid.UUID,
     restaurante: Restaurant = Depends(get_restaurante_publico),

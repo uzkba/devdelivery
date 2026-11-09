@@ -110,7 +110,12 @@ def token_para(db):
 
 @pytest.fixture()
 def restaurante(db):
-    r = Restaurant(trade_name="Marmitas da Vovó", latitude=-23.5505, longitude=-46.6333)
+    r = Restaurant(
+        trade_name="Marmitas da Vovó",
+        slug="marmitas-da-vovo",
+        latitude=-23.5505,
+        longitude=-46.6333,
+    )
     db.add(r)
     db.flush()
     db.refresh(r)
@@ -275,7 +280,12 @@ def entregador_user(db, restaurante):
 
 @pytest.fixture()
 def outro_restaurante(db):
-    r = Restaurant(trade_name="Marmitas do Zé (Restaurante B)", latitude=-23.5505, longitude=-46.6333)
+    r = Restaurant(
+        trade_name="Marmitas do Zé (Restaurante B)",
+        slug="marmitas-do-ze",
+        latitude=-23.5505,
+        longitude=-46.6333,
+    )
     db.add(r)
     db.flush()
     db.refresh(r)
