@@ -1,24 +1,28 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.depedencias import AuthenticatedClient
 from app.model.models import (
-    DeliveryChargeMode, DeliveryRule, DeliveryRuleNeighborhood, Order, OrderItem, OrderItemOption,
-    Food, MenuItem, Menu, ModifierOption,
-    CustomerAddress, OrderStatus,
+    Client,
+    CustomerAddress,
+    Food,
+    Menu,
+    MenuItem,
+    ModifierOption,
+    Order,
+    OrderItem,
+    OrderItemOption,
+    OrderStatus,
+    OrderStatusHistory,
     PaymentMethod,
-    Restaurant, RestaurantDeliverySettings,
+    Restaurant,
 )
 from app.schemas.pedido_schemas import OrderCreate
-from app.model.models import (
-    Order, OrderItem, OrderItemOption,
-    Food, ModifierOption, CustomerAddress, OrderStatus, OrderStatusHistory, Client
-)
-from app.api.depedencias import AuthenticatedClient
-from app.utils.geo import calcular_distancia_km
+from app.services import entrega_service
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 
 
@@ -57,82 +61,6 @@ def _buscar_restaurante(db: Session, restaurante_id) -> Restaurant:
     if not restaurante:
         raise HTTPException(status_code=404, detail="Restaurante não encontrado.")
     return restaurante
-
-
-def _buscar_configuracao_entrega(db: Session, restaurante_id) -> RestaurantDeliverySettings:
-    config = db.query(RestaurantDeliverySettings).filter_by(restaurant_id=restaurante_id).first()
-    if not config:
-        raise HTTPException(status_code=500, detail="Restaurante não possui configuração de entrega definida.")
-    if not config.delivery_enabled:
-        raise HTTPException(status_code=422, detail="Este restaurante não realiza entregas no momento.")
-    return config
-
-
-def _validar_valor_minimo(config: RestaurantDeliverySettings, valor_itens: Decimal) -> None:
-    if config.min_order_value is not None and valor_itens < config.min_order_value:
-        raise HTTPException(
-            status_code=422,
-            detail=f"O valor mínimo do pedido é de R$ {config.min_order_value:.2f}.",
-        )
-
-
-def _calcular_taxa_entrega(
-    db: Session, restaurante: Restaurant, endereco: CustomerAddress, config: RestaurantDeliverySettings
-) -> Decimal:
-    if config.charge_mode == DeliveryChargeMode.GRATIS:
-        return Decimal("0.00")
-
-    if config.charge_mode == DeliveryChargeMode.FIXO:
-        if config.fixed_fee is None:
-            raise HTTPException(status_code=500, detail="Taxa fixa de entrega não configurada.")
-        return Decimal(str(config.fixed_fee))
-
-    if config.charge_mode == DeliveryChargeMode.BAIRRO:
-        if not endereco.neighborhood:
-            raise HTTPException(status_code=400, detail="Endereço sem bairro informado.")
-        regra = (
-            db.query(DeliveryRuleNeighborhood)
-            .filter(
-                DeliveryRuleNeighborhood.restaurant_id == restaurante.id,
-                DeliveryRuleNeighborhood.is_active.is_(True),
-                func.lower(DeliveryRuleNeighborhood.neighborhood) == endereco.neighborhood.strip().lower(),
-            )
-            .first()
-        )
-        if not regra:
-            raise HTTPException(
-                status_code=422, detail=f"O bairro '{endereco.neighborhood}' está fora da área de entrega."
-            )
-        return Decimal(str(regra.fee))
-
-    if config.charge_mode == DeliveryChargeMode.DISTANCIA:
-        if not restaurante.latitude or not restaurante.longitude:
-            raise HTTPException(status_code=500, detail="Restaurante não possui coordenadas configuradas.")
-        if endereco.latitude is None or endereco.longitude is None:
-            raise HTTPException(status_code=400, detail="Endereço de entrega não possui coordenadas válidas.")
-
-        distancia_km = calcular_distancia_km(
-            float(restaurante.latitude), float(restaurante.longitude),
-            float(endereco.latitude), float(endereco.longitude),
-        )
-        regra_entrega = (
-            db.query(DeliveryRule)
-            .filter(
-                DeliveryRule.restaurant_id == restaurante.id,
-                DeliveryRule.is_active.is_(True),
-                DeliveryRule.min_distance_km <= distancia_km,
-                DeliveryRule.max_distance_km >= distancia_km,
-            )
-            .first()
-        )
-        if not regra_entrega:
-            raise HTTPException(
-                status_code=422,
-                detail=f"O endereço selecionado está fora da área de entrega (Distância: {distancia_km:.1f}km).",
-            )
-        return Decimal(str(regra_entrega.fee))
-
-    raise HTTPException(status_code=500, detail="Modo de cobrança de entrega inválido.")
 
 
 def _carregar_itens_do_cardapio_hoje(db: Session, restaurante_id, alimento_ids: list) -> dict:
@@ -205,8 +133,9 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
     restaurante = _buscar_restaurante(db, payload.restaurante_id)
     garantir_aceita_pedidos(db, restaurante)
-    config_entrega = _buscar_configuracao_entrega(db, payload.restaurante_id)
-    delivery_fee = _calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
+    config_entrega = entrega_service.buscar_configuracao(db, payload.restaurante_id)
+    entrega_service.garantir_entrega_ativa(config_entrega)
+    delivery_fee = entrega_service.calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
 
     alimento_ids = [item.alimento_id for item in payload.itens]
     todas_opcoes_ids = [
@@ -250,7 +179,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
             novo_item = _montar_item_do_pedido(db, novo_pedido.id, item_data, menu_item, alimento, dict_opcoes)
             valor_total_itens += novo_item.subtotal
 
-        _validar_valor_minimo(config_entrega, valor_total_itens)
+        entrega_service.validar_valor_minimo(config_entrega, valor_total_itens)
 
         novo_pedido.items_amount = valor_total_itens
         novo_pedido.total_amount = valor_total_itens + novo_pedido.delivery_fee
@@ -373,4 +302,3 @@ def atualizar_status_pedido(
     db.refresh(pedido)
     pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()
     return pedido
-
