@@ -50,7 +50,7 @@ def _hhmm(valor) -> str:
     return valor.strftime("%H:%M")
 
 
-def _montar_horarios(faixas: list[RestaurantHours]) -> list[HorarioDiaOut]:
+def montar_horarios(faixas: list[RestaurantHours]) -> list[HorarioDiaOut]:
     por_dia: dict[int, list[FaixaHorarioOut]] = {dia: [] for dia in range(7)}
     for faixa in faixas:
         por_dia[faixa.weekday].append(
@@ -59,7 +59,7 @@ def _montar_horarios(faixas: list[RestaurantHours]) -> list[HorarioDiaOut]:
     return [HorarioDiaOut(dia_semana=dia, faixas=por_dia[dia]) for dia in range(7)]
 
 
-def _montar_estado(estado: estado_service.EstadoOperacao) -> EstadoOperacaoOut:
+def montar_estado(estado: estado_service.EstadoOperacao) -> EstadoOperacaoOut:
     proxima = None
     if estado.proxima_abertura is not None:
         proxima = ProximaAberturaOut(
@@ -108,7 +108,7 @@ def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> Restaura
             bairro=restaurante.neighborhood,
             cidade=restaurante.city,
         ),
-        estado=_montar_estado(estado),
-        horarios=_montar_horarios(faixas),
+        estado=montar_estado(estado),
+        horarios=montar_horarios(faixas),
         entrega=entrega,
     )

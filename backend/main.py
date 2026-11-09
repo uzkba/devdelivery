@@ -16,6 +16,7 @@ from app.routers import (
     relatorio_route,
     admin_cardapio_route,
     restaurante_publico_route,
+    restaurante_admin_route,
     disponibilidade_route,
     cardapio_publico_route,
 )
@@ -48,6 +49,7 @@ app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
 app.include_router(admin_cardapio_route.router)
 app.include_router(restaurante_publico_route.router)
+app.include_router(restaurante_admin_route.router)
 app.include_router(marmita_route.router)
 app.include_router(combo_route.router)
 app.include_router(cardapio_publico_route.router)
