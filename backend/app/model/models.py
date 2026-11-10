@@ -831,7 +831,6 @@ class DeliveryChargeMode(str, enum.Enum):
     GRATIS = "GRATIS"
     FIXO = "FIXO"
     BAIRRO = "BAIRRO"
-    DISTANCIA = "DISTANCIA"
 
 
 class RestaurantDeliverySettings(Base):
@@ -857,8 +856,6 @@ class RestaurantDeliverySettings(Base):
 
 
 class DeliveryRuleNeighborhood(Base):
-    """Taxa por bairro (charge_mode == BAIRRO)."""
-
     __tablename__ = "regra_entrega_bairro"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -866,21 +863,6 @@ class DeliveryRuleNeighborhood(Base):
         "restaurante_id", UUID(as_uuid=True), ForeignKey("restaurante.id"), nullable=False, index=True
     )
     neighborhood: Mapped[str] = mapped_column("bairro", String(120), nullable=False)
-    fee: Mapped[Decimal] = mapped_column("taxa", Numeric(10, 2), nullable=False)
-    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
-
-
-class DeliveryRule(Base):
-    """Faixa de distancia em km (charge_mode == DISTANCIA)."""
-
-    __tablename__ = "regra_entrega_distancia"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    restaurant_id: Mapped[uuid.UUID] = mapped_column(
-        "restaurante_id", ForeignKey("restaurante.id"), nullable=False, index=True
-    )
-    min_distance_km: Mapped[Decimal] = mapped_column("distancia_min_km", Numeric(5, 2), nullable=False)
-    max_distance_km: Mapped[Decimal] = mapped_column("distancia_max_km", Numeric(5, 2), nullable=False)
     fee: Mapped[Decimal] = mapped_column("taxa", Numeric(10, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
 
