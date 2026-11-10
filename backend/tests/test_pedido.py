@@ -186,7 +186,6 @@ def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente,
 def test_pedido_rejeita_endereco_de_outro_cliente(db, client, restaurante, cliente, outro_cliente, categoria, token_para_cliente):
     endereco_alheio = CustomerAddress(
         client_id=outro_cliente.id, street="Rua de Outro", number="1", neighborhood="Bairro",
-        latitude=Decimal("-23.555000"), longitude=Decimal("-46.635000")
     )
     db.add(endereco_alheio)
     db.flush()

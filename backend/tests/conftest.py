@@ -113,8 +113,6 @@ def restaurante(db):
     r = Restaurant(
         trade_name="Marmitas da Vovó",
         slug="marmitas-da-vovo",
-        latitude=-23.5505,
-        longitude=-46.6333,
     )
     db.add(r)
     db.flush()
@@ -204,8 +202,6 @@ def endereco(db, cliente):
         number="123",
         neighborhood="Centro",
         primary_address=True,
-        latitude=Decimal("-23.555000"),
-        longitude=Decimal("-46.635000")
     )
     db.add(e)
     db.flush()
@@ -221,8 +217,6 @@ def endereco_secundario(db, cliente):
         number="456",
         neighborhood="Bairro Novo",
         primary_address=False,
-        latitude=Decimal("-23.560000"),
-        longitude=Decimal("-46.640000")
     )
     db.add(e)
     db.flush()
@@ -283,8 +277,6 @@ def outro_restaurante(db):
     r = Restaurant(
         trade_name="Marmitas do Zé (Restaurante B)",
         slug="marmitas-do-ze",
-        latitude=-23.5505,
-        longitude=-46.6333,
     )
     db.add(r)
     db.flush()

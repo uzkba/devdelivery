@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -11,17 +10,12 @@ class EnderecoCreate(BaseModel):
     complement: str | None = None
     reference_point: str | None = None
     primary_address: bool = False
-    
-    # Tornando latitude e longitude opcionais (aceitam nulo caso o endereço seja antigo)
-    latitude: float | None = Field(None, description="Latitude geolocalizada do cliente")
-    longitude: float | None = Field(None, description="Longitude geolocalizada do cliente")
 
 
 class EnderecoOut(EnderecoCreate):
     id: uuid.UUID
     client_id: uuid.UUID
     created_at: datetime
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -32,5 +26,3 @@ class EnderecoUpdate(BaseModel):
     complement: str | None = None
     reference_point: str | None = None
     primary_address: bool | None = None
-    latitude: float | None = None
-    longitude: float | None = None

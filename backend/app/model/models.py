@@ -61,9 +61,6 @@ class Restaurant(Base):
     number: Mapped[str | None] = mapped_column("numero", String(20))
     neighborhood: Mapped[str | None] = mapped_column("bairro", String(100))
     city: Mapped[str | None] = mapped_column("cidade", String(100))
-    # Localizacao usada no calculo de taxa por distancia
-    latitude: Mapped[Decimal | None] = mapped_column("latitude", Numeric(10, 8))
-    longitude: Mapped[Decimal | None] = mapped_column("longitude", Numeric(11, 8))
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     is_paused: Mapped[bool] = mapped_column(
         "pausado", Boolean, default=False, server_default="false", nullable=False
@@ -144,9 +141,6 @@ class CustomerAddress(Base):
         "endereco_principal", Boolean, default=False, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-    latitude: Mapped[Decimal | None] = mapped_column("latitude", Numeric(10, 8))
-    longitude: Mapped[Decimal | None] = mapped_column("longitude", Numeric(11, 8))
-
     client: Mapped["Client"] = relationship(back_populates="addresses")
 
     __table_args__ = (
