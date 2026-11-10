@@ -1,9 +1,9 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.texto import chave_comparacao
 from app.model.models import (
     CustomerAddress,
     DeliveryChargeMode,
@@ -52,18 +52,20 @@ def calcular_taxa_entrega(
         return Decimal(str(config.fixed_fee))
 
     if config.charge_mode == DeliveryChargeMode.BAIRRO:
-        if not endereco.neighborhood:
+        if not endereco.neighborhood or not endereco.neighborhood.strip():
             raise HTTPException(status_code=400, detail="Endereço sem bairro informado.")
-        regra = (
+        chave = chave_comparacao(endereco.neighborhood)
+        regras = (
             db.query(DeliveryRuleNeighborhood)
             .filter(
                 DeliveryRuleNeighborhood.restaurant_id == restaurante.id,
                 DeliveryRuleNeighborhood.is_active.is_(True),
-                func.lower(DeliveryRuleNeighborhood.neighborhood) == endereco.neighborhood.strip().lower(),
             )
-            .first()
+            .order_by(DeliveryRuleNeighborhood.neighborhood)
+            .all()
         )
-        if not regra:
+        regra = next((r for r in regras if chave_comparacao(r.neighborhood) == chave), None)
+        if regra is None:
             raise HTTPException(
                 status_code=422, detail=f"O bairro '{endereco.neighborhood}' está fora da área de entrega."
             )

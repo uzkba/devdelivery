@@ -560,3 +560,28 @@ def test_frete_cobrado_quando_itens_ficam_abaixo_do_valor(client, db, cenario_ch
     dados = response.json()
     assert dados["valor_entrega"] == "7.50"
     assert dados["valor_total"] == "61.50"
+
+
+def test_taxa_por_bairro_ignora_acento_caixa_e_espacos(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["regra_frete"].neighborhood = "São José"
+    endereco.neighborhood = "  sao   JOSE "
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "PIX",
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 1,
+                "opcoes_selecionadas": [],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    assert response.json()["valor_entrega"] == "7.50"
