@@ -20,29 +20,27 @@ router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def criar_pedido(
     payload: OrderCreate,
-    background_tasks: BackgroundTasks,  # <-- Injeção do FastAPI para tarefas em 2º plano
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
-    # 1. O service processa o carrinho, calcula totais e salva no banco (Síncrono)
+
     novo_pedido = pedido_service.criar_pedido(db, payload, current_client)
     
-    # 2. Monta o pacote de dados leve que será enviado ao painel do restaurante
     evento_ws = {
         "tipo": "NOVO_PEDIDO",
         "pedido_id": str(novo_pedido.id),
         "numero_pedido": novo_pedido.order_number,
+        "tipo_atendimento": novo_pedido.service_type.value,
         "valor_total": float(novo_pedido.total_amount)
     }
 
-    # 3. Agenda a notificação WebSocket sem travar a resposta HTTP do cliente (Assíncrono)
     background_tasks.add_task(
         manager.broadcast_to_restaurant, 
         novo_pedido.restaurant_id, 
         evento_ws
     )
 
-    # 4. Retorna o schema OrderOut normalmente para o frontend do cliente
     return novo_pedido
 
 
@@ -60,7 +58,7 @@ def listar_pedidos(
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
             cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime,
-            valor_total=pedido.total_amount,
+            tipo_atendimento=pedido.service_type, valor_total=pedido.total_amount,
         )
         for pedido, nome, status_obj in resultados
     ]
@@ -84,8 +82,8 @@ def listar_meus_pedidos(
     items = [
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
-            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime,
-            valor_total=pedido.total_amount,
+            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime, 
+            tipo_atendimento=pedido.service_type, valor_total=pedido.total_amount,
         )
         for pedido, nome, status_obj in resultados
     ]

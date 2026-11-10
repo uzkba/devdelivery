@@ -84,3 +84,10 @@ def aplicar_frete_gratis(
     ):
         return Decimal("0.00")
     return taxa
+
+
+def garantir_retirada_ativa(config: RestaurantDeliverySettings) -> None:
+    if not config.pickup_enabled:
+        raise HTTPException(
+            status_code=422, detail="Este restaurante não realiza retiradas no momento."
+        )

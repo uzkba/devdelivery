@@ -2,7 +2,9 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.model.models import OrderServiceType
 
 
 class ClientSummaryOut(BaseModel):
@@ -40,11 +42,18 @@ class OrderItemCreate(BaseModel):
 
 class OrderCreate(BaseModel):
     restaurante_id: uuid.UUID
-    endereco_id: uuid.UUID
+    tipo_atendimento: OrderServiceType = OrderServiceType.DELIVERY
+    endereco_id: Optional[uuid.UUID] = None
     forma_pagamento: Literal["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"]
     valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0)
     itens: List[OrderItemCreate] = Field(..., min_length=1)
     observacoes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exigir_endereco_na_entrega(self) -> "OrderCreate":
+        if self.tipo_atendimento == OrderServiceType.DELIVERY and self.endereco_id is None:
+            raise ValueError("Informe o endereço de entrega.")
+        return self
 
 
 class OrderItemOptionOut(BaseModel):
@@ -77,10 +86,11 @@ class OrderOut(BaseModel):
     status: OrderStatusOut
     forma_pagamento: PaymentMethodOut = Field(validation_alias="payment_method")
     data_hora: datetime = Field(validation_alias="order_datetime")
+    tipo_atendimento: OrderServiceType = Field(validation_alias="service_type")
 
-    endereco_rua: str = Field(validation_alias="address_street")
-    endereco_numero: str = Field(validation_alias="address_number")
-    endereco_bairro: str = Field(validation_alias="address_neighborhood")
+    endereco_rua: Optional[str] = Field(default=None, validation_alias="address_street")
+    endereco_numero: Optional[str] = Field(default=None, validation_alias="address_number")
+    endereco_bairro: Optional[str] = Field(default=None, validation_alias="address_neighborhood")
 
     valor_itens: Decimal = Field(validation_alias="items_amount")
     valor_entrega: Decimal = Field(validation_alias="delivery_fee")
@@ -98,6 +108,7 @@ class OrderListItemOut(BaseModel):
     cliente_nome: str
     status: OrderStatusOut
     data_hora: datetime = Field(validation_alias="order_datetime")
+    tipo_atendimento: OrderServiceType = Field(validation_alias="service_type")
     valor_total: Decimal = Field(validation_alias="total_amount")
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 

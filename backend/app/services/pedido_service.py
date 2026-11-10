@@ -13,6 +13,7 @@ from app.model.models import (
     Menu,
     MenuItem,
     ModifierOption,
+    OrderServiceType,
     Order,
     OrderItem,
     OrderItemOption,
@@ -127,15 +128,22 @@ def _montar_item_do_pedido(db, pedido_id, item_data, menu_item, alimento, dict_o
 
 
 def criar_pedido(db: Session, payload: OrderCreate, current_client: AuthenticatedClient) -> Order:
+    retirada = payload.tipo_atendimento == OrderServiceType.PICKUP
+
     status_inicial = _buscar_status_inicial(db)
-    endereco = _buscar_endereco_do_cliente(db, payload.endereco_id, current_client.id)
+    endereco = None if retirada else _buscar_endereco_do_cliente(db, payload.endereco_id, current_client.id)
     forma_pagamento = _buscar_forma_pagamento(db, payload.forma_pagamento)
     _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
     restaurante = _buscar_restaurante(db, payload.restaurante_id)
     garantir_aceita_pedidos(db, restaurante)
     config_entrega = entrega_service.buscar_configuracao(db, payload.restaurante_id)
-    entrega_service.garantir_entrega_ativa(config_entrega)
-    delivery_fee = entrega_service.calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
+
+    if retirada:
+        entrega_service.garantir_retirada_ativa(config_entrega)
+        delivery_fee = Decimal("0.00")
+    else:
+        entrega_service.garantir_entrega_ativa(config_entrega)
+        delivery_fee = entrega_service.calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
 
     alimento_ids = [item.alimento_id for item in payload.itens]
     todas_opcoes_ids = [
@@ -155,12 +163,13 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
         client_id=current_client.id,
         status_id=status_inicial.id,
         payment_method_id=forma_pagamento.id,
+        service_type=payload.tipo_atendimento,
         address_name=current_client.name,
         address_phone=current_client.phone,
-        address_street=endereco.street,
-        address_number=endereco.number,
-        address_neighborhood=endereco.neighborhood,
-        address_complement=endereco.complement,
+        address_street=endereco.street if endereco else None,
+        address_number=endereco.number if endereco else None,
+        address_neighborhood=endereco.neighborhood if endereco else None,
+        address_complement=endereco.complement if endereco else None,
         notes=payload.observacoes,
         delivery_fee=delivery_fee,
         items_amount=Decimal("0.00"),
