@@ -13,10 +13,11 @@ class EnderecoPublicoOut(BaseModel):
 
 
 class TaxaEntregaOut(BaseModel):
-    modo: str  # GRATIS | FIXO | BAIRRO
+    modo: str
     valor_fixo: Optional[Decimal] = None
     taxa_minima: Optional[Decimal] = None
     taxa_maxima: Optional[Decimal] = None
+    frete_gratis_a_partir_de: Optional[Decimal] = None
 
 
 class EntregaPublicaOut(BaseModel):

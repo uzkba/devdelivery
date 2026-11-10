@@ -103,16 +103,21 @@ def test_taxa_fixa(client, db, restaurante):
         "valor_fixo": "5.00",
         "taxa_minima": None,
         "taxa_maxima": None,
+        "frete_gratis_a_partir_de": None,
     }
-
 
 def test_entrega_gratis(client, db, restaurante):
     _config(db, restaurante, DeliveryChargeMode.GRATIS)
 
     taxa = _get(client, restaurante.slug)["entrega"]["taxa"]
 
-    assert taxa == {"modo": "GRATIS", "valor_fixo": None, "taxa_minima": None, "taxa_maxima": None}
-
+    assert taxa == {
+        "modo": "GRATIS",
+        "valor_fixo": None,
+        "taxa_minima": None,
+        "taxa_maxima": None,
+        "frete_gratis_a_partir_de": None,
+    }
 
 def test_taxa_por_bairro_devolve_faixa_das_regras_ativas(client, db, restaurante):
     _config(db, restaurante, DeliveryChargeMode.BAIRRO)

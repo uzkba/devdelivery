@@ -28,6 +28,7 @@ def _montar_taxa(
 
     if config.charge_mode == DeliveryChargeMode.FIXO:
         taxa.valor_fixo = config.fixed_fee
+        taxa.frete_gratis_a_partir_de = config.free_delivery_from
     elif config.charge_mode == DeliveryChargeMode.BAIRRO:
         minimo, maximo = (
             db.query(
@@ -42,6 +43,7 @@ def _montar_taxa(
         )
         taxa.taxa_minima = minimo
         taxa.taxa_maxima = maximo
+        taxa.frete_gratis_a_partir_de = config.free_delivery_from
 
     return taxa
 

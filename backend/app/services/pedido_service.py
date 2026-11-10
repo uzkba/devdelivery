@@ -181,6 +181,9 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
 
         entrega_service.validar_valor_minimo(config_entrega, valor_total_itens)
 
+        novo_pedido.delivery_fee = entrega_service.aplicar_frete_gratis(
+            config_entrega, valor_total_itens, novo_pedido.delivery_fee
+        )
         novo_pedido.items_amount = valor_total_itens
         novo_pedido.total_amount = valor_total_itens + novo_pedido.delivery_fee
 

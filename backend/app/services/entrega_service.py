@@ -70,3 +70,15 @@ def calcular_taxa_entrega(
         return Decimal(str(regra.fee))
 
     raise HTTPException(status_code=500, detail="Modo de cobrança de entrega inválido.")
+
+
+def aplicar_frete_gratis(
+    config: RestaurantDeliverySettings, valor_itens: Decimal, taxa: Decimal
+) -> Decimal:
+    if (
+        config.charge_mode != DeliveryChargeMode.GRATIS
+        and config.free_delivery_from is not None
+        and valor_itens >= config.free_delivery_from
+    ):
+        return Decimal("0.00")
+    return taxa

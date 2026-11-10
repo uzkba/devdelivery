@@ -843,6 +843,9 @@ class RestaurantDeliverySettings(Base):
         "modo_cobranca", Enum(DeliveryChargeMode, name="modo_cobranca_entrega"), nullable=False
     )
     fixed_fee: Mapped[Decimal | None] = mapped_column("taxa_fixa", Numeric(10, 2))  # so com charge_mode == FIXO
+    free_delivery_from: Mapped[Decimal | None] = mapped_column(
+        "frete_gratis_a_partir_de", Numeric(10, 2)
+    )
     created_at: Mapped[datetime | None] = mapped_column("criado_em", DateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         "atualizado_em", DateTime, server_default=func.now(), onupdate=func.now()

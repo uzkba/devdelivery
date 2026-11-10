@@ -500,3 +500,63 @@ def test_deve_rejeitar_item_nao_disponivel_no_cardapio_do_dia(client, db, catego
 
     assert response.status_code == 422
     assert "Itens indisponíveis no cardápio de hoje" in response.json()["detail"]
+
+
+def test_frete_gratis_quando_itens_atingem_o_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.00")
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "DINHEIRO",
+        "valor_pago_dinheiro": 70.00,
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 2,
+                "opcoes_selecionadas": [
+                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
+                ],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    dados = response.json()
+    assert dados["valor_itens"] == "54.00"
+    assert dados["valor_entrega"] == "0.00"
+    assert dados["valor_total"] == "54.00"
+    assert dados["valor_troco"] == "16.00"
+
+
+def test_frete_cobrado_quando_itens_ficam_abaixo_do_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.01")
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "DINHEIRO",
+        "valor_pago_dinheiro": 70.00,
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 2,
+                "opcoes_selecionadas": [
+                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
+                ],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    dados = response.json()
+    assert dados["valor_entrega"] == "7.50"
+    assert dados["valor_total"] == "61.50"
