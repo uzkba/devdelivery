@@ -13,8 +13,9 @@ from app.model.models import (
     FoodCategory,
     Restaurant,
     RestaurantDeliverySettings,
+    PaymentMethod,
 )
-from app.services import slug_service
+from app.services import pagamento_service, slug_service
 from app.services.categoria_alimento_service import criar_categorias_iniciais
 
 TEMPO_ENTREGA_PADRAO_MIN = 40
@@ -35,6 +36,7 @@ class ProvisionamentoResultado:
     admin: AdminUser
     configuracao_entrega: RestaurantDeliverySettings
     categorias: list[FoodCategory]
+    formas_pagamento: list[PaymentMethod]
 
 
 def _texto_opcional(valor: str | None) -> str | None:
@@ -155,6 +157,13 @@ def provisionar_restaurante(
         db.flush()
 
         categorias = criar_categorias_iniciais(db, restaurante.id)
+
+        formas_pagamento = pagamento_service.vincular_todas_as_formas_ativas(db, restaurante.id)
+        if not formas_pagamento:
+            raise ProvisionamentoError(
+                "Não há forma de pagamento ativa cadastrada. Aplique as migrations e tente novamente."
+            )
+
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -168,4 +177,4 @@ def provisionar_restaurante(
     db.refresh(restaurante)
     db.refresh(admin)
     db.refresh(configuracao)
-    return ProvisionamentoResultado(restaurante, admin, configuracao, categorias)
+    return ProvisionamentoResultado(restaurante, admin, configuracao, categorias, formas_pagamento)

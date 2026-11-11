@@ -17,8 +17,9 @@ from app.schemas.restaurante_publico_schemas import (
     ProximaAberturaOut,
     RestaurantePublicoOut,
     TaxaEntregaOut,
+    FormaPagamentoPublicaOut,
 )
-from app.services import estado_restaurante_service as estado_service
+from app.services import estado_restaurante_service as estado_service, pagamento_service
 
 
 def _montar_taxa(
@@ -28,6 +29,7 @@ def _montar_taxa(
 
     if config.charge_mode == DeliveryChargeMode.FIXO:
         taxa.valor_fixo = config.fixed_fee
+        taxa.frete_gratis_a_partir_de = config.free_delivery_from
     elif config.charge_mode == DeliveryChargeMode.BAIRRO:
         minimo, maximo = (
             db.query(
@@ -42,6 +44,7 @@ def _montar_taxa(
         )
         taxa.taxa_minima = minimo
         taxa.taxa_maxima = maximo
+        taxa.frete_gratis_a_partir_de = config.free_delivery_from
 
     return taxa
 
@@ -111,4 +114,8 @@ def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> Restaura
         estado=montar_estado(estado),
         horarios=montar_horarios(faixas),
         entrega=entrega,
+        formas_pagamento=[
+            FormaPagamentoPublicaOut(codigo=forma.code, nome=forma.name)
+            for forma in pagamento_service.listar_aceitas(db, restaurante.id)
+        ],
     )

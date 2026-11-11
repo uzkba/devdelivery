@@ -13,10 +13,11 @@ class EnderecoPublicoOut(BaseModel):
 
 
 class TaxaEntregaOut(BaseModel):
-    modo: str  # GRATIS | FIXO | BAIRRO
+    modo: str
     valor_fixo: Optional[Decimal] = None
     taxa_minima: Optional[Decimal] = None
     taxa_maxima: Optional[Decimal] = None
+    frete_gratis_a_partir_de: Optional[Decimal] = None
 
 
 class EntregaPublicaOut(BaseModel):
@@ -29,28 +30,33 @@ class EntregaPublicaOut(BaseModel):
 
 
 class FaixaHorarioOut(BaseModel):
-    abre_as: str  # "HH:MM"
-    fecha_as: str  # "HH:MM"
+    abre_as: str
+    fecha_as: str
 
 
 class HorarioDiaOut(BaseModel):
-    dia_semana: int  # 0 = segunda ... 6 = domingo
-    faixas: list[FaixaHorarioOut]  # lista vazia = fechado nesse dia
+    dia_semana: int
+    faixas: list[FaixaHorarioOut]
 
 
 class ProximaAberturaOut(BaseModel):
-    em_dias: int  # 0 = hoje, 1 = amanha ...
+    em_dias: int
     dia_semana: int
     abre_as: str
 
 
 class EstadoOperacaoOut(BaseModel):
-    estado: str  # ABERTO | PAUSADO | FECHADO
+    estado: str
     aceita_pedidos: bool
     horario_definido: bool
     motivo: Optional[str] = None
     pausado_ate: Optional[datetime] = None
     proxima_abertura: Optional[ProximaAberturaOut] = None
+
+
+class FormaPagamentoPublicaOut(BaseModel):
+    codigo: str
+    nome: str
 
 
 class RestaurantePublicoOut(BaseModel):
@@ -61,3 +67,4 @@ class RestaurantePublicoOut(BaseModel):
     estado: EstadoOperacaoOut
     horarios: list[HorarioDiaOut]
     entrega: Optional[EntregaPublicaOut] = None
+    formas_pagamento: list[FormaPagamentoPublicaOut]

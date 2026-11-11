@@ -14,8 +14,6 @@ ENDERECO_PAYLOAD = {
     "street": "Rua das Flores",
     "number": "123",
     "neighborhood": "Centro",
-    "latitude": -23.5505,
-    "longitude": -46.6333,
 }
 
 

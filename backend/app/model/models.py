@@ -61,9 +61,6 @@ class Restaurant(Base):
     number: Mapped[str | None] = mapped_column("numero", String(20))
     neighborhood: Mapped[str | None] = mapped_column("bairro", String(100))
     city: Mapped[str | None] = mapped_column("cidade", String(100))
-    # Localizacao usada no calculo de taxa por distancia
-    latitude: Mapped[Decimal | None] = mapped_column("latitude", Numeric(10, 8))
-    longitude: Mapped[Decimal | None] = mapped_column("longitude", Numeric(11, 8))
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     is_paused: Mapped[bool] = mapped_column(
         "pausado", Boolean, default=False, server_default="false", nullable=False
@@ -144,9 +141,6 @@ class CustomerAddress(Base):
         "endereco_principal", Boolean, default=False, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-    latitude: Mapped[Decimal | None] = mapped_column("latitude", Numeric(10, 8))
-    longitude: Mapped[Decimal | None] = mapped_column("longitude", Numeric(11, 8))
-
     client: Mapped["Client"] = relationship(back_populates="addresses")
 
     __table_args__ = (
@@ -677,6 +671,17 @@ class PaymentMethod(Base):
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
 
 
+class RestaurantPaymentMethod(Base):
+    __tablename__ = "restaurante_forma_pagamento"
+
+    restaurant_id: Mapped[uuid.UUID] = mapped_column(
+        "restaurante_id", ForeignKey("restaurante.id", ondelete="CASCADE"), primary_key=True
+    )
+    payment_method_id: Mapped[uuid.UUID] = mapped_column(
+        "forma_pagamento_id", ForeignKey("forma_pagamento.id", ondelete="RESTRICT"), primary_key=True
+    )
+
+
 class OrderStatus(Base):
     __tablename__ = "status_pedido"
 
@@ -686,6 +691,14 @@ class OrderStatus(Base):
     order: Mapped[int] = mapped_column("ordem", Integer, nullable=False)
     is_paid: Mapped[bool] = mapped_column("pago", Boolean, default=False, nullable=False)
     is_final: Mapped[bool] = mapped_column("is_final", Boolean, default=False, nullable=False)
+
+
+class OrderServiceType(str, enum.Enum):
+    """Como o cliente recebe o pedido. O valor e o codigo tecnico guardado no
+    banco e devolvido pela API."""
+
+    DELIVERY = "ENTREGA"
+    PICKUP = "RETIRADA"
 
 
 class Order(Base):
@@ -698,13 +711,23 @@ class Order(Base):
     status_id: Mapped[uuid.UUID] = mapped_column("status_id", ForeignKey("status_pedido.id"), nullable=False)
     payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_pagamento_id", ForeignKey("forma_pagamento.id"), nullable=False)
     order_datetime: Mapped[datetime] = mapped_column("data_hora", DateTime, server_default=func.now())
+    service_type: Mapped[OrderServiceType] = mapped_column(
+        "tipo_atendimento",
+        Enum(
+            OrderServiceType,
+            name="tipo_atendimento_pedido",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=OrderServiceType.DELIVERY,
+        server_default="ENTREGA",
+        nullable=False,
+    )
 
-    # Snapshot do endereco no momento do pedido (nao e FK)
     address_name: Mapped[str] = mapped_column("endereco_nome", String(150), nullable=False)
     address_phone: Mapped[str] = mapped_column("endereco_telefone", String(20), nullable=False)
-    address_street: Mapped[str] = mapped_column("endereco_rua", String(150), nullable=False)
-    address_number: Mapped[str] = mapped_column("endereco_numero", String(20), nullable=False)
-    address_neighborhood: Mapped[str] = mapped_column("endereco_bairro", String(100), nullable=False)
+    address_street: Mapped[str | None] = mapped_column("endereco_rua", String(150))
+    address_number: Mapped[str | None] = mapped_column("endereco_numero", String(20))
+    address_neighborhood: Mapped[str | None] = mapped_column("endereco_bairro", String(100))
     address_complement: Mapped[str | None] = mapped_column("endereco_complemento", String(150))
 
     notes: Mapped[str | None] = mapped_column("observacoes", Text)
@@ -727,6 +750,11 @@ class Order(Base):
         CheckConstraint("valor_total >= 0", name="ck_pedido_valor_total"),
         CheckConstraint("valor_pago_dinheiro IS NULL OR valor_pago_dinheiro >= 0", name="ck_pedido_valor_pago_dinheiro"),
         CheckConstraint("valor_troco IS NULL OR valor_troco >= 0", name="ck_pedido_valor_troco"),
+        CheckConstraint(
+            "tipo_atendimento = 'RETIRADA' OR "
+            "(endereco_rua IS NOT NULL AND endereco_numero IS NOT NULL AND endereco_bairro IS NOT NULL)",
+            name="ck_pedido_endereco_entrega",
+        ),
         Index("idx_pedido_data_hora", "data_hora"),
         Index("idx_pedido_cliente", "cliente_id"),
         Index("idx_pedido_status", "status_id"),
@@ -831,7 +859,6 @@ class DeliveryChargeMode(str, enum.Enum):
     GRATIS = "GRATIS"
     FIXO = "FIXO"
     BAIRRO = "BAIRRO"
-    DISTANCIA = "DISTANCIA"
 
 
 class RestaurantDeliverySettings(Base):
@@ -850,6 +877,9 @@ class RestaurantDeliverySettings(Base):
         "modo_cobranca", Enum(DeliveryChargeMode, name="modo_cobranca_entrega"), nullable=False
     )
     fixed_fee: Mapped[Decimal | None] = mapped_column("taxa_fixa", Numeric(10, 2))  # so com charge_mode == FIXO
+    free_delivery_from: Mapped[Decimal | None] = mapped_column(
+        "frete_gratis_a_partir_de", Numeric(10, 2)
+    )
     created_at: Mapped[datetime | None] = mapped_column("criado_em", DateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         "atualizado_em", DateTime, server_default=func.now(), onupdate=func.now()
@@ -857,8 +887,6 @@ class RestaurantDeliverySettings(Base):
 
 
 class DeliveryRuleNeighborhood(Base):
-    """Taxa por bairro (charge_mode == BAIRRO)."""
-
     __tablename__ = "regra_entrega_bairro"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -866,21 +894,6 @@ class DeliveryRuleNeighborhood(Base):
         "restaurante_id", UUID(as_uuid=True), ForeignKey("restaurante.id"), nullable=False, index=True
     )
     neighborhood: Mapped[str] = mapped_column("bairro", String(120), nullable=False)
-    fee: Mapped[Decimal] = mapped_column("taxa", Numeric(10, 2), nullable=False)
-    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
-
-
-class DeliveryRule(Base):
-    """Faixa de distancia em km (charge_mode == DISTANCIA)."""
-
-    __tablename__ = "regra_entrega_distancia"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    restaurant_id: Mapped[uuid.UUID] = mapped_column(
-        "restaurante_id", ForeignKey("restaurante.id"), nullable=False, index=True
-    )
-    min_distance_km: Mapped[Decimal] = mapped_column("distancia_min_km", Numeric(5, 2), nullable=False)
-    max_distance_km: Mapped[Decimal] = mapped_column("distancia_max_km", Numeric(5, 2), nullable=False)
     fee: Mapped[Decimal] = mapped_column("taxa", Numeric(10, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
 

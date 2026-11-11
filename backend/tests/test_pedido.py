@@ -8,7 +8,7 @@ from app.model.models import (
     Menu,
     MenuItem,
     Client,
-    DeliveryRule,
+    DeliveryRuleNeighborhood,
     ModifierGroup,
     ModifierOption,
     CustomerAddress,
@@ -186,7 +186,6 @@ def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente,
 def test_pedido_rejeita_endereco_de_outro_cliente(db, client, restaurante, cliente, outro_cliente, categoria, token_para_cliente):
     endereco_alheio = CustomerAddress(
         client_id=outro_cliente.id, street="Rua de Outro", number="1", neighborhood="Bairro",
-        latitude=Decimal("-23.555000"), longitude=Decimal("-46.635000")
     )
     db.add(endereco_alheio)
     db.flush()
@@ -331,29 +330,22 @@ def test_login_cliente_senha_errada_retorna_401(db, client):
 @pytest.fixture
 def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_pagamento_dinheiro):
     """
-    Prepara o ecossistema necessário para um pedido com frete por distância:
-    Coordenadas, Configuração de Entrega (modo DISTANCIA), Regra de Entrega,
+    Prepara o ecossistema necessário para um pedido com frete por bairro:
+    Configuração de Entrega (modo BAIRRO), Regra de Entrega do bairro do endereço,
     Cardápio de Hoje e Complementos.
     """
-    restaurante.latitude = Decimal("-23.550520")
-    restaurante.longitude = Decimal("-46.633308")
-
-    endereco.latitude = Decimal("-23.555000")
-    endereco.longitude = Decimal("-46.635000")
-
     config_entrega = RestaurantDeliverySettings(
         restaurant_id=restaurante.id,
-        charge_mode=DeliveryChargeMode.DISTANCIA,
+        charge_mode=DeliveryChargeMode.BAIRRO,
         min_order_value=None,
     )
     db.add(config_entrega)
 
-    regra_frete = DeliveryRule(
+    regra_frete = DeliveryRuleNeighborhood(
         restaurant_id=restaurante.id,
-        min_distance_km=Decimal("0.0"),
-        max_distance_km=Decimal("5.0"),
+        neighborhood=endereco.neighborhood,
         fee=Decimal("7.50"),
-        is_active=True
+        is_active=True,
     )
     db.add(regra_frete)
 
@@ -367,7 +359,6 @@ def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_
     db.add(hamburguer)
     db.flush()
 
-    # 3.5 Criar o GRUPO vinculado ao Alimento
     grupo_adicionais = ModifierGroup(
         name="Adicionais",
         food_id=hamburguer.id,
@@ -377,7 +368,6 @@ def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_
     db.add(grupo_adicionais)
     db.flush()
 
-    # 4. Criar Opção/Complemento
     bacon = ModifierOption(
         group_id=grupo_adicionais.id,
         name="Adicional de Bacon",
@@ -457,8 +447,7 @@ def test_deve_rejeitar_pedido_fora_da_area_de_entrega(client, db, cenario_checko
     headers = {"Authorization": f"Bearer {token}"}
     alimento = cenario_checkout["alimento"]
 
-    endereco.latitude = Decimal("-24.000000")
-    endereco.longitude = Decimal("-47.000000")
+    endereco.neighborhood = "Bairro Distante"
     db.commit()
 
     payload = {
@@ -511,3 +500,88 @@ def test_deve_rejeitar_item_nao_disponivel_no_cardapio_do_dia(client, db, catego
 
     assert response.status_code == 422
     assert "Itens indisponíveis no cardápio de hoje" in response.json()["detail"]
+
+
+def test_frete_gratis_quando_itens_atingem_o_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.00")
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "DINHEIRO",
+        "valor_pago_dinheiro": 70.00,
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 2,
+                "opcoes_selecionadas": [
+                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
+                ],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    dados = response.json()
+    assert dados["valor_itens"] == "54.00"
+    assert dados["valor_entrega"] == "0.00"
+    assert dados["valor_total"] == "54.00"
+    assert dados["valor_troco"] == "16.00"
+
+
+def test_frete_cobrado_quando_itens_ficam_abaixo_do_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.01")
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "DINHEIRO",
+        "valor_pago_dinheiro": 70.00,
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 2,
+                "opcoes_selecionadas": [
+                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
+                ],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    dados = response.json()
+    assert dados["valor_entrega"] == "7.50"
+    assert dados["valor_total"] == "61.50"
+
+
+def test_taxa_por_bairro_ignora_acento_caixa_e_espacos(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
+    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
+    cenario_checkout["regra_frete"].neighborhood = "São José"
+    endereco.neighborhood = "  sao   JOSE "
+    db.commit()
+
+    payload = {
+        "restaurante_id": str(restaurante.id),
+        "endereco_id": str(endereco.id),
+        "forma_pagamento": "PIX",
+        "itens": [
+            {
+                "alimento_id": str(cenario_checkout["alimento"].id),
+                "quantidade": 1,
+                "opcoes_selecionadas": [],
+            }
+        ],
+    }
+
+    response = client.post("/pedidos", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    assert response.json()["valor_entrega"] == "7.50"

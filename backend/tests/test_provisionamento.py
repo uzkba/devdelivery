@@ -7,6 +7,8 @@ from app.model.models import (
     FoodCategory,
     Restaurant,
     RestaurantDeliverySettings,
+    PaymentMethod,
+    RestaurantPaymentMethod,
 )
 from app.services import provisionamento_service as svc
 from app.services.provisionamento_service import ProvisionamentoError
@@ -190,3 +192,32 @@ def test_falha_no_meio_nao_deixa_nada_gravado(db, monkeypatch):
     assert db.query(Restaurant).filter_by(slug="falha-no-meio").count() == 0
     assert db.query(AdminUser).filter_by(login="falha.admin").count() == 0
     assert db.query(RestaurantDeliverySettings).count() == 0
+
+
+def test_vincula_todas_as_formas_de_pagamento_ativas(db):
+    resultado = _provisionar(db)
+
+    ativas = {f.code for f in db.query(PaymentMethod).filter(PaymentMethod.is_active.is_(True))}
+    vinculadas = {
+        codigo
+        for (codigo,) in db.query(PaymentMethod.code)
+        .join(
+            RestaurantPaymentMethod,
+            RestaurantPaymentMethod.payment_method_id == PaymentMethod.id,
+        )
+        .filter(RestaurantPaymentMethod.restaurant_id == resultado.restaurante.id)
+        .all()
+    }
+    assert ativas
+    assert vinculadas == ativas
+    assert {f.code for f in resultado.formas_pagamento} == ativas
+
+
+def test_sem_forma_de_pagamento_ativa_e_recusado_sem_gravar_nada(db):
+    db.query(PaymentMethod).update({PaymentMethod.is_active: False})
+    db.flush()
+
+    with pytest.raises(ProvisionamentoError, match="forma de pagamento"):
+        _provisionar(db)
+
+    assert _total_restaurantes_novos(db) == 0
