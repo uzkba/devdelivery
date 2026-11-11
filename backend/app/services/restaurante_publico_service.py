@@ -17,8 +17,9 @@ from app.schemas.restaurante_publico_schemas import (
     ProximaAberturaOut,
     RestaurantePublicoOut,
     TaxaEntregaOut,
+    FormaPagamentoPublicaOut,
 )
-from app.services import estado_restaurante_service as estado_service
+from app.services import estado_restaurante_service as estado_service, pagamento_service
 
 
 def _montar_taxa(
@@ -113,4 +114,8 @@ def montar_restaurante_publico(db: Session, restaurante: Restaurant) -> Restaura
         estado=montar_estado(estado),
         horarios=montar_horarios(faixas),
         entrega=entrega,
+        formas_pagamento=[
+            FormaPagamentoPublicaOut(codigo=forma.code, nome=forma.name)
+            for forma in pagamento_service.listar_aceitas(db, restaurante.id)
+        ],
     )

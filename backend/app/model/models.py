@@ -671,6 +671,17 @@ class PaymentMethod(Base):
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
 
 
+class RestaurantPaymentMethod(Base):
+    __tablename__ = "restaurante_forma_pagamento"
+
+    restaurant_id: Mapped[uuid.UUID] = mapped_column(
+        "restaurante_id", ForeignKey("restaurante.id", ondelete="CASCADE"), primary_key=True
+    )
+    payment_method_id: Mapped[uuid.UUID] = mapped_column(
+        "forma_pagamento_id", ForeignKey("forma_pagamento.id", ondelete="RESTRICT"), primary_key=True
+    )
+
+
 class OrderStatus(Base):
     __tablename__ = "status_pedido"
 

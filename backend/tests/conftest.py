@@ -39,10 +39,19 @@ from app.model.models import (
     MealBox,
     MealBoxKind,
     Combo,
+    PaymentMethod,
+    RestaurantPaymentMethod,
 )
 
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+FORMAS_PAGAMENTO_PADRAO = [
+    ("DINHEIRO", "Dinheiro"),
+    ("PIX", "Pix"),
+    ("CARTAO_CREDITO", "Cartão de Crédito"),
+    ("CARTAO_DEBITO", "Cartão de Débito"),
+]
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -116,8 +125,39 @@ def restaurante(db):
     )
     db.add(r)
     db.flush()
+    for codigo, nome in FORMAS_PAGAMENTO_PADRAO:
+        forma = _get_or_create_payment_method(db, codigo, nome)
+        db.add(RestaurantPaymentMethod(restaurant_id=r.id, payment_method_id=forma.id))
+    db.flush()
     db.refresh(r)
     return r
+
+
+@pytest.fixture()
+def aceitar_formas(db):
+    
+    def _aceitar(restaurante, *codigos):
+        desejadas = {
+            db.query(PaymentMethod).filter_by(code=codigo).one().id for codigo in codigos
+        }
+        atuais = {
+            vinculo.payment_method_id: vinculo
+            for vinculo in db.query(RestaurantPaymentMethod)
+            .filter(RestaurantPaymentMethod.restaurant_id == restaurante.id)
+            .all()
+        }
+        for forma_id, vinculo in atuais.items():
+            if forma_id not in desejadas:
+                db.delete(vinculo)
+        for forma_id in desejadas - atuais.keys():
+            db.add(
+                RestaurantPaymentMethod(
+                    restaurant_id=restaurante.id, payment_method_id=forma_id
+                )
+            )
+        db.flush()
+
+    return _aceitar
 
 
 @pytest.fixture()

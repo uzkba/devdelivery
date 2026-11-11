@@ -23,7 +23,7 @@ from app.model.models import (
     Restaurant,
 )
 from app.schemas.pedido_schemas import OrderCreate
-from app.services import entrega_service
+from app.services import entrega_service, pagamento_service
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 
 
@@ -136,6 +136,7 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
     restaurante = _buscar_restaurante(db, payload.restaurante_id)
     garantir_aceita_pedidos(db, restaurante)
+    pagamento_service.garantir_forma_aceita(db, restaurante.id, forma_pagamento)
     config_entrega = entrega_service.buscar_configuracao(db, payload.restaurante_id)
 
     if retirada:

@@ -13,6 +13,7 @@ from app.model.models import (
     Order,
     OrderServiceType,
     RestaurantDeliverySettings,
+    PaymentMethod,
 )
 
 
@@ -322,3 +323,54 @@ def test_banco_aceita_retirada_sem_endereco(
 
     assert pedido.service_type == OrderServiceType.PICKUP
     assert pedido.address_street is None
+
+
+# ── forma de pagamento aceita ──
+def test_forma_de_pagamento_aceita_e_registrada(
+    db, client, restaurante, cliente, alimento_do_dia, token_para_cliente, aceitar_formas
+):
+    _config(db, restaurante)
+    aceitar_formas(restaurante, "PIX")
+
+    resp = client.post(
+        "/pedidos",
+        json=_payload(restaurante, alimento_do_dia, tipo_atendimento="RETIRADA"),
+        headers=_headers(cliente, token_para_cliente),
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["forma_pagamento"]["codigo"] == "PIX"
+
+
+def test_forma_de_pagamento_nao_aceita_e_rejeitada(
+    db, client, restaurante, cliente, alimento_do_dia, token_para_cliente, aceitar_formas
+):
+    _config(db, restaurante)
+    aceitar_formas(restaurante, "DINHEIRO")
+
+    resp = client.post(
+        "/pedidos",
+        json=_payload(restaurante, alimento_do_dia, tipo_atendimento="RETIRADA"),
+        headers=_headers(cliente, token_para_cliente),
+    )
+
+    assert resp.status_code == 422
+    assert "Pix" in resp.json()["detail"]
+    assert db.query(Order).filter_by(restaurant_id=restaurante.id).count() == 0
+
+
+def test_forma_de_pagamento_inativa_e_rejeitada(
+    db, client, restaurante, cliente, alimento_do_dia, token_para_cliente
+):
+    _config(db, restaurante)
+    db.query(PaymentMethod).filter_by(code="PIX").update({PaymentMethod.is_active: False})
+    db.flush()
+
+    resp = client.post(
+        "/pedidos",
+        json=_payload(restaurante, alimento_do_dia, tipo_atendimento="RETIRADA"),
+        headers=_headers(cliente, token_para_cliente),
+    )
+
+    assert resp.status_code == 422
+    assert db.query(Order).filter_by(restaurant_id=restaurante.id).count() == 0

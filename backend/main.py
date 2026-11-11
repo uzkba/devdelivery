@@ -21,6 +21,7 @@ from app.routers import (
     cardapio_publico_route,
     entrega_admin_route,
     bairro_entrega_route,
+    pagamento_admin_route,
 )
 
 app = FastAPI(
@@ -57,6 +58,7 @@ app.include_router(combo_route.router)
 app.include_router(cardapio_publico_route.router)
 app.include_router(entrega_admin_route.router)
 app.include_router(bairro_entrega_route.router)
+app.include_router(pagamento_admin_route.router)
 
 for _router in disponibilidade_route.routers:
     app.include_router(_router)
