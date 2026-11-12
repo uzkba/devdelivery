@@ -18,6 +18,7 @@ from app.model.models import (
 from app.schemas.pedido_v2_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
 from app.services import disponibilidade_service as disponibilidade
 from app.services import pedido_validacao_service as validacao
+from app.services import cardapio_publico_service as cardapio
 
 HOJE = date(2026, 11, 11)  # quarta-feira (weekday 2)
 
@@ -414,3 +415,43 @@ def test_combo_com_item_desativado_esgotado_ou_de_outro_restaurante(
         "não encontrado",
         lambda: validacao.validar_item_combo(db, outro_restaurante.id, _in_combo(combo), HOJE),
     )
+
+
+# --------------------------- coerência com o cardápio público ---------------------------
+def _combo_aparece_no_cardapio(db, restaurante, combo) -> bool:
+    return combo.id in {c["id"] for c in cardapio.montar_home(db, restaurante.id, HOJE)["combos"]}
+
+
+@pytest.fixture()
+def combo_basico(db, restaurante, arroz, suco):
+    pronta = _marmita_pronta(db, restaurante, arroz)
+    combo = _combo(db, restaurante, marmitas=[(pronta, 1)], alimentos=[(suco, 1)])
+    return combo, pronta
+
+
+@pytest.mark.parametrize(
+    "quebrar",
+    [
+        pytest.param(lambda db, combo, pronta, arroz, suco: setattr(suco, "sold_out_on", HOJE), id="bebida-esgotada"),
+        pytest.param(lambda db, combo, pronta, arroz, suco: setattr(suco, "is_active", False), id="bebida-inativa"),
+        pytest.param(lambda db, combo, pronta, arroz, suco: setattr(arroz, "sold_out_on", HOJE), id="alimento-da-marmita-esgotado"),
+        pytest.param(lambda db, combo, pronta, arroz, suco: setattr(pronta, "is_active", False), id="marmita-inativa"),
+        pytest.param(lambda db, combo, pronta, arroz, suco: setattr(combo, "sold_out_on", HOJE), id="combo-esgotado"),
+        pytest.param(
+            lambda db, combo, pronta, arroz, suco: disponibilidade.definir_regra(db, pronta, "PERSONALIZADO", [0]),
+            id="marmita-fora-do-dia",
+        ),
+    ],
+)
+def test_cardapio_e_pedido_concordam_quando_algo_do_combo_quebra(
+    db, restaurante, combo_basico, arroz, suco, quebrar
+):
+    combo, pronta = combo_basico
+
+    assert _combo_aparece_no_cardapio(db, restaurante, combo)
+    validacao.validar_item_combo(db, restaurante.id, _in_combo(combo), HOJE)
+
+    quebrar(db, combo, pronta, arroz, suco)
+
+    assert not _combo_aparece_no_cardapio(db, restaurante, combo)
+    _rejeita("", lambda: validacao.validar_item_combo(db, restaurante.id, _in_combo(combo), HOJE))
