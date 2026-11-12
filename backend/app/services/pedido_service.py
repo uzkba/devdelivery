@@ -195,49 +195,6 @@ def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.
     return pedido
 
 
-def atualizar_status_pedido(
-    db: Session,
-    pedido_id: uuid.UUID,
-    novo_status_codigo: str,
-    restaurant_id: uuid.UUID,
-    usuario_id: uuid.UUID,
-) -> Order:
-    pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
-    if not pedido:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
-
-    novo_status = db.query(OrderStatus).filter_by(code=novo_status_codigo).first()
-    if not novo_status:
-        raise HTTPException(status_code=404, detail=f"Status '{novo_status_codigo}' não existe.")
-
-    status_atual = db.query(OrderStatus).filter_by(id=pedido.status_id).first()
-
-    if status_atual and status_atual.is_final:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Pedido está em status final ('{status_atual.code}') e não pode mudar mais.",
-        )
-
-    if status_atual and status_atual.id == novo_status.id:
-        raise HTTPException(status_code=400, detail="O pedido já está neste status.")
-
-    db.add(
-        OrderStatusHistory(
-            order_id=pedido.id,
-            previous_status_id=pedido.status_id,
-            new_status_id=novo_status.id,
-            changed_by=usuario_id,
-        )
-    )
-
-    pedido.status_id = novo_status.id
-
-    db.commit()
-    db.refresh(pedido)
-    pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()
-    return pedido
-
-
 MOTIVO_MIN = 3
 MOTIVO_MAX = 300
 

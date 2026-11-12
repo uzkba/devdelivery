@@ -1,20 +1,30 @@
-import uuid
 import math
-from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.api.depedencias import get_current_user
-from app.schemas.pedido_schemas import (
-    OrderCreate, OrderOut, OrderListItemOut, PaginatedOrdersOut,
+from app.api.depedencias import (
+    AuthenticatedClient,
+    get_current_client,
+    get_current_user,
+    require_role,
 )
-from app.services import pedido_service
-from app.api.depedencias import require_role
-from app.schemas.pedido_schemas import OrderCreate, OrderOut, OrderStatusUpdate
-from app.api.depedencias import get_current_client, AuthenticatedClient
+from app.core.database import get_db
 from app.core.websockets import manager
+from app.schemas.pedido_schemas import (
+    OrderCreate,
+    OrderListItemOut,
+    OrderOut,
+    OrderReasonIn,
+    OrderSendIn,
+    PaginatedOrdersOut,
+)
+from app.services import pedido_fluxo, pedido_service
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
+
+operador = require_role("admin", "atendente")
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -24,21 +34,20 @@ def criar_pedido(
     db: Session = Depends(get_db),
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
-
     novo_pedido = pedido_service.criar_pedido(db, payload, current_client)
-    
+
     evento_ws = {
         "tipo": "NOVO_PEDIDO",
         "pedido_id": str(novo_pedido.id),
         "numero_pedido": novo_pedido.order_number,
         "tipo_atendimento": novo_pedido.service_type.value,
-        "valor_total": float(novo_pedido.total_amount)
+        "valor_total": float(novo_pedido.total_amount),
     }
 
     background_tasks.add_task(
-        manager.broadcast_to_restaurant, 
-        novo_pedido.restaurant_id, 
-        evento_ws
+        manager.broadcast_to_restaurant,
+        novo_pedido.restaurant_id,
+        evento_ws,
     )
 
     return novo_pedido
@@ -49,7 +58,7 @@ def listar_pedidos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     resultados, total = pedido_service.listar_pedidos(
         db, current_user.restaurant_id, page, page_size
@@ -78,16 +87,16 @@ def listar_meus_pedidos(
     resultados, total = pedido_service.listar_pedidos_cliente(
         db, current_client.id, page, page_size
     )
-    
+
     items = [
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
-            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime, 
+            cliente_nome=nome, status=status_obj, data_hora=pedido.order_datetime,
             tipo_atendimento=pedido.service_type, valor_total=pedido.total_amount,
         )
         for pedido, nome, status_obj in resultados
     ]
-    
+
     return PaginatedOrdersOut(
         items=items, total=total, page=page, page_size=page_size,
         total_pages=math.ceil(total / page_size) if page_size else 0,
@@ -100,25 +109,96 @@ def buscar_pedido_do_cliente(
     db: Session = Depends(get_db),
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
-    pedido = pedido_service.buscar_pedido_do_cliente(db, pedido_id, current_client.id)
-    return pedido
+    return pedido_service.buscar_pedido_do_cliente(db, pedido_id, current_client.id)
+
 
 @router.get("/{pedido_id}", response_model=OrderOut)
 def buscar_pedido(
     pedido_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    pedido = pedido_service.buscar_pedido_por_id(db, pedido_id, current_user.restaurant_id)
-    return pedido
+    return pedido_service.buscar_pedido_por_id(db, pedido_id, current_user.restaurant_id)
 
-@router.patch("/{pedido_id}/status", response_model=OrderOut)
-def atualizar_status_pedido(
-    pedido_id: uuid.UUID,
-    payload: OrderStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user = Depends(require_role("admin", "atendente")),
-):
-    return pedido_service.atualizar_status_pedido(
-        db, pedido_id, payload.novo_status, current_user.restaurant_id, current_user.id
+
+def _transicionar(db: Session, pedido_id: uuid.UUID, usuario, codigo: str, **extra):
+    return pedido_service.transicionar_pedido(
+        db, pedido_id, usuario.restaurant_id, usuario.id, codigo, **extra
     )
+
+
+@router.post("/{pedido_id}/aceitar", response_model=OrderOut)
+def aceitar_pedido(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.CONFIRMADO)
+
+
+@router.post("/{pedido_id}/recusar", response_model=OrderOut)
+def recusar_pedido(
+    pedido_id: uuid.UUID,
+    payload: OrderReasonIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.RECUSADO, motivo=payload.motivo)
+
+
+@router.post("/{pedido_id}/preparo", response_model=OrderOut)
+def iniciar_preparo(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.EM_PREPARO)
+
+
+@router.post("/{pedido_id}/pronto", response_model=OrderOut)
+def marcar_pronto(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.PRONTO)
+
+
+@router.post("/{pedido_id}/enviar", response_model=OrderOut)
+def enviar_pedido(
+    pedido_id: uuid.UUID,
+    payload: OrderSendIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(
+        db, pedido_id, usuario, pedido_fluxo.SAIU_PARA_ENTREGA, entregador_id=payload.entregador_id
+    )
+
+
+@router.post("/{pedido_id}/entregue", response_model=OrderOut)
+def marcar_entregue(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.ENTREGUE)
+
+
+@router.post("/{pedido_id}/retirado", response_model=OrderOut)
+def marcar_retirado(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.RETIRADO)
+
+
+@router.post("/{pedido_id}/cancelar", response_model=OrderOut)
+def cancelar_pedido(
+    pedido_id: uuid.UUID,
+    payload: OrderReasonIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return _transicionar(db, pedido_id, usuario, pedido_fluxo.CANCELADO, motivo=payload.motivo)

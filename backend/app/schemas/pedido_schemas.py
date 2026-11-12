@@ -3,7 +3,10 @@ from decimal import Decimal
 from datetime import datetime
 from typing import Annotated, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from app.model.models import OrderServiceType
+from app.services import pedido_fluxo
 
 from app.model.models import OrderServiceType
 
@@ -106,6 +109,14 @@ class OrderCreate(_Entrada):
         return self
 
 
+class OrderReasonIn(_Entrada):
+    motivo: str
+
+
+class OrderSendIn(_Entrada):
+    entregador_id: uuid.UUID
+
+
 class ClientSummaryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -147,7 +158,19 @@ class DriverOut(BaseModel):
     nome: str = Field(validation_alias="name")
 
 
-class OrderOut(BaseModel):
+class _StatusDoFluxo(BaseModel):
+    @computed_field
+    @property
+    def status_rotulo(self) -> str:
+        return pedido_fluxo.rotulo(self.tipo_atendimento, self.status.codigo, self.status.nome)
+
+    @computed_field
+    @property
+    def acoes_disponiveis(self) -> List[str]:
+        return pedido_fluxo.acoes_disponiveis(self.tipo_atendimento, self.status.codigo)
+
+
+class OrderOut(_StatusDoFluxo):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
@@ -172,7 +195,7 @@ class OrderOut(BaseModel):
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
 
-class OrderListItemOut(BaseModel):
+class OrderListItemOut(_StatusDoFluxo):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
@@ -183,10 +206,6 @@ class OrderListItemOut(BaseModel):
     tipo_atendimento: OrderServiceType = Field(validation_alias="service_type")
     valor_total: Decimal = Field(validation_alias="total_amount")
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
-
-
-class OrderStatusUpdate(BaseModel):
-    novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
 
 
 class PaginatedOrdersOut(BaseModel):
