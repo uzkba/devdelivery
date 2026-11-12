@@ -29,13 +29,6 @@ STATUS_IGNORADOS = ("CANCELADO", "RECUSADO")
 
 
 def preco_referencia_combo(combo: Combo) -> Decimal | None:
-    """Soma dos itens avulsos do combo (preco x quantidade).
-
-    Marmita usa `price`; alimento usa `standalone_price` (Food.base_price e
-    legado e e ignorado). Devolve None quando algum item nao tem preco ou
-    quando a economia (soma - preco do combo) e <= 0: nesses casos o
-    cliente nao ve preco "de referencia".
-    """
     total = Decimal("0")
     for item in combo.meal_box_items:
         total += item.meal_box.price * item.quantity
@@ -59,13 +52,7 @@ def _visiveis(db: Session, modelo: type, objetos: list, hoje: date) -> list:
     ]
 
 
-def _com_componentes_disponiveis(db: Session, combos: list[Combo], hoje: date) -> list[Combo]:
-    """Combo so aparece se TODOS os componentes estao disponiveis hoje.
-
-    Mesma regra do pedido (pedido_validacao_service): ativo, serve hoje e nao
-    esgotado. Marmita pronta tambem exige os alimentos da sua composicao.
-    Em lote: 2 consultas, independente da quantidade de combos.
-    """
+def com_componentes_disponiveis(db: Session, combos: list[Combo], hoje: date) -> list[Combo]:
     marmitas = {i.meal_box.id: i.meal_box for c in combos for i in c.meal_box_items}
     alimentos = {i.food.id: i.food for c in combos for i in c.food_items}
     for marmita in marmitas.values():
@@ -128,7 +115,7 @@ def _combos(db: Session, restaurant_id: uuid.UUID, hoje: date) -> list[dict]:
         .order_by(Combo.name)
     ).all()
     # componente inativo, esgotado ou fora do dia derruba o combo (igual ao pedido)
-    combos = _com_componentes_disponiveis(db, list(combos), hoje)
+    combos = com_componentes_disponiveis(db, list(combos), hoje)
     return [
         {
             "id": c.id,
