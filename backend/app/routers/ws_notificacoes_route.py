@@ -1,4 +1,4 @@
-# backend/app/api/routers/ws_notifications.py
+# backend/app/routers/ws_notificacoes_route.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
 from app.core.websockets import manager
 from app.core.seguranca import decode_access_token

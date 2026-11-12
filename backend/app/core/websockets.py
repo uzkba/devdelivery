@@ -3,30 +3,54 @@ from typing import Dict, List
 
 from fastapi import WebSocket
 
+Grupo = Dict[uuid.UUID, List[WebSocket]]
+
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[uuid.UUID, List[WebSocket]] = {}
+        self.active_connections: Grupo = {}
+        self.client_connections: Grupo = {}
 
-    async def connect(self, websocket: WebSocket, restaurant_id: uuid.UUID):
+    @staticmethod
+    async def _conectar(grupo: Grupo, websocket: WebSocket, chave: uuid.UUID):
         await websocket.accept()
-        if restaurant_id not in self.active_connections:
-            self.active_connections[restaurant_id] = []
-        self.active_connections[restaurant_id].append(websocket)
+        grupo.setdefault(chave, []).append(websocket)
 
-    def disconnect(self, websocket: WebSocket, restaurant_id: uuid.UUID):
-        if restaurant_id in self.active_connections:
-            if websocket in self.active_connections[restaurant_id]:
-                self.active_connections[restaurant_id].remove(websocket)
-            if not self.active_connections[restaurant_id]:
-                del self.active_connections[restaurant_id]
+    @staticmethod
+    def _desconectar(grupo: Grupo, websocket: WebSocket, chave: uuid.UUID):
+        conexoes = grupo.get(chave)
+        if conexoes is None:
+            return
+        if websocket in conexoes:
+            conexoes.remove(websocket)
+        if not conexoes:
+            del grupo[chave]
 
-    async def broadcast_to_restaurant(self, restaurant_id: uuid.UUID, message: dict):
-        for connection in list(self.active_connections.get(restaurant_id, [])):
+    @classmethod
+    async def _difundir(cls, grupo: Grupo, chave: uuid.UUID, message: dict):
+        for connection in list(grupo.get(chave, [])):
             try:
                 await connection.send_json(message)
             except Exception:
-                self.disconnect(connection, restaurant_id)
+                cls._desconectar(grupo, connection, chave)
+
+    async def connect(self, websocket: WebSocket, restaurant_id: uuid.UUID):
+        await self._conectar(self.active_connections, websocket, restaurant_id)
+
+    def disconnect(self, websocket: WebSocket, restaurant_id: uuid.UUID):
+        self._desconectar(self.active_connections, websocket, restaurant_id)
+
+    async def broadcast_to_restaurant(self, restaurant_id: uuid.UUID, message: dict):
+        await self._difundir(self.active_connections, restaurant_id, message)
+
+    async def connect_client(self, websocket: WebSocket, client_id: uuid.UUID):
+        await self._conectar(self.client_connections, websocket, client_id)
+
+    def disconnect_client(self, websocket: WebSocket, client_id: uuid.UUID):
+        self._desconectar(self.client_connections, websocket, client_id)
+
+    async def broadcast_to_client(self, client_id: uuid.UUID, message: dict):
+        await self._difundir(self.client_connections, client_id, message)
 
 
 manager = ConnectionManager()
