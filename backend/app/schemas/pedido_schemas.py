@@ -141,6 +141,12 @@ class OrderItemOut(BaseModel):
     snapshot: Optional[dict] = None
 
 
+class DriverOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nome: str = Field(validation_alias="name")
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -151,7 +157,8 @@ class OrderOut(BaseModel):
     forma_pagamento: PaymentMethodOut = Field(validation_alias="payment_method")
     data_hora: datetime = Field(validation_alias="order_datetime")
     tipo_atendimento: OrderServiceType = Field(validation_alias="service_type")
-
+    motivo: Optional[str] = Field(default=None, validation_alias="status_reason")
+    entregador: Optional[DriverOut] = Field(default=None, validation_alias="driver")
     endereco_rua: Optional[str] = Field(default=None, validation_alias="address_street")
     endereco_numero: Optional[str] = Field(default=None, validation_alias="address_number")
     endereco_bairro: Optional[str] = Field(default=None, validation_alias="address_neighborhood")
