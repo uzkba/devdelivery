@@ -1,293 +1,387 @@
-import pytest
-from datetime import date
+import uuid
 from decimal import Decimal
+from types import SimpleNamespace
 
-from app.model.models import (
-    Food,
-    FoodCategory,
-    Menu,
-    MenuItem,
-    Client,
-    DeliveryRuleNeighborhood,
-    ModifierGroup,
-    ModifierOption,
-    CustomerAddress,
-    RestaurantDeliverySettings,
-    DeliveryRuleNeighborhood,
-    DeliveryChargeMode
-)
+import pytest
+
 from app.core.seguranca import hash_password
-from tests.conftest import status_criado
+from app.core.tempo import hoje_local
+from app.model.models import (
+    Client,
+    CustomerAddress,
+    DeliveryChargeMode,
+    DeliveryRuleNeighborhood,
+    Order,
+    OrderItem,
+)
+from tests.helpers_pedido import (
+    config_entrega,
+    corpo_pedido,
+    criar_alimento,
+    criar_avulso,
+    criar_combo,
+    criar_personalizavel,
+    criar_pronta,
+    item_avulso,
+    item_combo,
+    item_marmita,
+    selecao,
+)
 
-
-# ── fixtures/helpers locais ──
 
 @pytest.fixture()
-def categoria(db, restaurante):
-    c = FoodCategory(restaurant_id=restaurante.id, name="Pratos", display_order=0)
-    db.add(c)
-    db.flush()
-    db.refresh(c)
-    return c
-
-
-@pytest.fixture
-def config_entrega_gratis(db, restaurante):
-    config = RestaurantDeliverySettings(
-        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.GRATIS, min_order_value=None,
-    )
-    db.add(config); db.commit(); db.refresh(config)
-    return config
-
-
-@pytest.fixture
-def config_entrega_fixo(db, restaurante):
-    config = RestaurantDeliverySettings(
-        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.FIXO,
-        fixed_fee=7.50, min_order_value=20,
-    )
-    db.add(config); db.commit(); db.refresh(config)
-    return config
-
-
-@pytest.fixture
-def config_entrega_bairro(db, restaurante):
-    config = RestaurantDeliverySettings(
-        restaurant_id=restaurante.id, charge_mode=DeliveryChargeMode.BAIRRO, min_order_value=None,
-    )
-    db.add(config); db.flush()
-    db.add(DeliveryRuleNeighborhood(restaurant_id=restaurante.id, neighborhood="Centro", fee=6.00))
-    db.commit(); db.refresh(config)
-    return config
-
-
-def _payload_pedido(endereco_id, restaurante_id, alimento_id, quantidade=1):
-    return {
-        "restaurante_id": str(restaurante_id),
-        "endereco_id": str(endereco_id),
-        "forma_pagamento": "DINHEIRO",
-        "valor_pago_dinheiro": "100.00",
-        "itens": [{"alimento_id": str(alimento_id), "quantidade": quantidade}],
-    }
-
-
-def criar_alimento_direto(db, categoria, **overrides):
-    dados = dict(
-        restaurant_id=categoria.restaurant_id,
-        category_id=categoria.id,
-        name="Feijoada",
-        base_price=Decimal("10.00"),
-        is_active=True,
-    )
-    dados.update(overrides)
-    f = Food(**dados)
-    db.add(f)
-    db.flush()
-    db.refresh(f)
-    return f
-
-
-def criar_cardapio_hoje(db, restaurante):
-    menu = Menu(restaurant_id=restaurante.id, date=date.today())
-    db.add(menu)
-    db.flush()
-    db.refresh(menu)
-    return menu
-
-
-def criar_item_cardapio(db, menu, alimento, is_available=True, day_price=None):
-    item = MenuItem(menu_id=menu.id, food_id=alimento.id, is_available=is_available, day_price=day_price)
-    db.add(item)
-    db.flush()
-    db.refresh(item)
-    return item
-
-
-def payload_pedido(restaurante, endereco, alimento, **overrides):
-    dados = dict(
-        restaurante_id=str(restaurante.id),
-        endereco_id=str(endereco.id),
-        forma_pagamento="PIX",
-        itens=[{"alimento_id": str(alimento.id), "quantidade": 2, "opcoes_selecionadas": []}],
-    )
-    dados.update(overrides)
-    return dados
-
-
-# ── criação de pedido ──────────────────────────────────────────────
-
-def test_cliente_cria_pedido_com_sucesso(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria, base_price=Decimal("15.00"))
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
-
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+def cardapio(db, restaurante, cat_venda, cat_composicao, cat_composicao_2):
+    feijoada = criar_avulso(db, restaurante, cat_venda, "Feijoada", "32.90")
+    frango = criar_alimento(db, restaurante, "Frango", cat_composicao)
+    arroz = criar_alimento(db, restaurante, "Arroz", cat_composicao_2)
+    pronta = criar_pronta(db, restaurante, [(arroz, 1)])
+    monte = criar_personalizavel(db, restaurante, [(cat_composicao, 1)])
+    combo = criar_combo(db, restaurante, [(pronta, 1)], [(feijoada, 1)])
+    return SimpleNamespace(
+        feijoada=feijoada, frango=frango, arroz=arroz,
+        pronta=pronta, monte=monte, combo=combo, carnes=cat_composicao,
     )
 
-    if resp.status_code != 201:
-        print(f"\n[ERRO PAYLOAD] A API disse: {resp.json()}\n")
 
-    assert resp.status_code == 201
+@pytest.fixture()
+def postar(client, cliente, token_para_cliente):
+    def _postar(corpo):
+        return client.post(
+            "/pedidos",
+            json=corpo,
+            headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+        )
+
+    return _postar
+
+
+def _pedidos_do_restaurante(db, restaurante):
+    return db.query(Order).filter_by(restaurant_id=restaurante.id).count()
+
+
+def test_um_pedido_de_cada_tipo_e_criado_validado_e_persistido_com_snapshot(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(db, restaurante, charge_mode=DeliveryChargeMode.FIXO, fixed_fee=Decimal("7.50"))
+    c = cardapio
+
+    resp = postar(
+        corpo_pedido(
+            restaurante,
+            [
+                item_marmita(c.pronta, quantidade=2),
+                item_marmita(
+                    c.monte,
+                    selecoes=[selecao(c.carnes, (c.frango, 1))],
+                    observacao="sem tempero",
+                ),
+                item_combo(c.combo),
+                item_avulso(c.feijoada, 2),
+            ],
+            endereco_id=str(endereco.id),
+            forma_pagamento="DINHEIRO",
+            valor_pago_dinheiro="200.00",
+            observacoes="tocar o interfone",
+        )
+    )
+
+    assert resp.status_code == 201, resp.json()
     corpo = resp.json()
-    assert corpo["cliente_id"] == str(cliente.id)
-    assert corpo["valor_itens"] == "30.00"  # 15.00 * 2
-    assert corpo["valor_entrega"] == "0.00"
-    assert corpo["valor_total"] == "30.00"
-    assert len(corpo["itens"]) == 1
+    assert corpo["valor_itens"] == "175.80"
+    assert corpo["valor_entrega"] == "7.50"
+    assert corpo["valor_total"] == "183.30"
+    assert corpo["valor_troco"] == "16.70"
+    assert corpo["observacoes"] == "tocar o interfone"
 
+    por_nome = {i["nome"]: i for i in corpo["itens"]}
+    assert set(por_nome) == {"Pronta", "Monte a sua", "Combo Almoço", "Feijoada"}
 
-def test_pedido_usa_preco_do_dia_quando_setado(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria, base_price=Decimal("20.00"))
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento, day_price=Decimal("12.50"))
-
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento, itens=[{"alimento_id": str(alimento.id), "quantidade": 1, "opcoes_selecionadas": []}]),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    pronta = por_nome["Pronta"]
+    assert (pronta["marmita_id"], pronta["combo_id"], pronta["alimento_id"]) == (
+        str(c.pronta.id), None, None,
     )
-
-    if resp.status_code != 201:
-        print(f"\n[ERRO PAYLOAD] A API disse: {resp.json()}\n")
-
-    assert resp.status_code == 201
-    assert resp.json()["valor_itens"] == "12.50"
-
-
-def test_pedido_rejeita_item_fora_do_cardapio_de_hoje(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria)
-
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    assert (pronta["quantidade"], pronta["preco_unitario"], pronta["subtotal"]) == (
+        2, "20.00", "40.00",
     )
+    assert pronta["snapshot"]["composicao"][0]["nome"] == "Arroz"
 
-    assert resp.status_code == 422
+    monte = por_nome["Monte a sua"]
+    assert monte["observacao"] == "sem tempero"
+    assert monte["snapshot"]["escolhas"][0]["nome"] == "Frango"
 
-
-def test_pedido_rejeita_item_indisponivel_hoje(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria)
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento, is_available=False)
-
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    combo = por_nome["Combo Almoço"]
+    assert (combo["combo_id"], combo["marmita_id"], combo["alimento_id"]) == (
+        str(c.combo.id), None, None,
     )
+    assert combo["snapshot"]["alimentos"][0]["nome"] == "Feijoada"
 
-    assert resp.status_code == 422
+    avulso = por_nome["Feijoada"]
+    assert avulso["alimento_id"] == str(c.feijoada.id)
+    assert avulso["subtotal"] == "65.80"
+
+    assert db.query(OrderItem).filter_by(order_id=uuid.UUID(corpo["id"])).count() == 4
 
 
-def test_pedido_rejeita_endereco_de_outro_cliente(db, client, restaurante, cliente, outro_cliente, categoria, token_para_cliente):
-    endereco_alheio = CustomerAddress(
-        client_id=outro_cliente.id, street="Rua de Outro", number="1", neighborhood="Bairro",
+def test_detalhe_para_a_equipe_traz_o_snapshot(
+    db, client, restaurante, endereco, cardapio, postar, admin_headers
+):
+    config_entrega(db, restaurante)
+
+    criado = postar(
+        corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(endereco.id))
     )
-    db.add(endereco_alheio)
-    db.flush()
-    db.refresh(endereco_alheio)
+    detalhe = client.get(f"/pedidos/{criado.json()['id']}", headers=admin_headers)
 
-    alimento = criar_alimento_direto(db, categoria)
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
+    assert detalhe.status_code == 200
+    assert detalhe.json()["itens"][0]["snapshot"]["tipo"] == "AVULSO"
 
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco_alheio, alimento),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+
+def test_pedido_sem_token_retorna_401(client, restaurante, endereco, cardapio):
+    corpo = corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(endereco.id))
+    assert client.post("/pedidos", json=corpo).status_code == 401
+
+
+def test_pedido_com_token_de_admin_retorna_401(
+    client, restaurante, endereco, cardapio, admin_headers
+):
+    corpo = corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(endereco.id))
+    assert client.post("/pedidos", json=corpo, headers=admin_headers).status_code == 401
+
+
+def test_slug_inexistente_retorna_404(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            restaurante_slug="nao-existe", endereco_id=str(endereco.id),
+        )
     )
 
     assert resp.status_code == 404
 
 
-def test_pedido_sem_token_retorna_401(client, restaurante, endereco, categoria, db):
-    alimento = criar_alimento_direto(db, categoria)
-    resp = client.post("/pedidos", json=payload_pedido(restaurante, endereco, alimento))
-    assert resp.status_code == 401
+def test_restaurante_id_no_payload_e_rejeitado(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
 
-
-def test_pedido_com_token_de_admin_retorna_401(db, client, restaurante, cliente, endereco, categoria, admin_user, token_para):
-    alimento = criar_alimento_direto(db, categoria)
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento),
-        headers={"Authorization": f"Bearer {token_para(admin_user)}"},
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            endereco_id=str(endereco.id), restaurante_id=str(restaurante.id),
+        )
     )
-    assert resp.status_code == 401
 
-
-# ── forma de pagamento / troco ──────────────────────────────────────
-
-def test_dinheiro_sem_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria)
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
-
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento, forma_pagamento="DINHEIRO"),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
-    )
     assert resp.status_code == 422
 
 
-def test_dinheiro_com_valor_menor_que_total_retorna_400(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria, base_price=Decimal("10.00"))
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
+def test_preco_enviado_pelo_cliente_e_rejeitado(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
 
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(
-            restaurante, endereco, alimento,
-            forma_pagamento="DINHEIRO", valor_pago_dinheiro=5.00,
-            itens=[{"alimento_id": str(alimento.id), "quantidade": 1, "opcoes_selecionadas": []}],
-        ),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada, preco="1.00")],
+            endereco_id=str(endereco.id),
+        )
     )
+
+    assert resp.status_code == 422
+
+
+def test_observacao_do_item_acima_de_140_caracteres_e_rejeitada(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(db, restaurante)
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada, observacao="a" * 141)],
+            endereco_id=str(endereco.id),
+        )
+    )
+
+    assert resp.status_code == 422
+
+
+def test_item_esgotado_hoje_rejeita_o_pedido_inteiro(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
+    cardapio.pronta.sold_out_on = hoje_local()
+
+    resp = postar(
+        corpo_pedido(
+            restaurante,
+            [item_avulso(cardapio.feijoada), item_marmita(cardapio.pronta)],
+            endereco_id=str(endereco.id),
+        )
+    )
+
+    assert resp.status_code == 422
+    assert "esgotado hoje" in resp.json()["detail"]
+    assert _pedidos_do_restaurante(db, restaurante) == 0
+
+
+def test_marmita_personalizavel_com_soma_errada_retorna_422(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(db, restaurante)
+
+    resp = postar(
+        corpo_pedido(
+            restaurante,
+            [item_marmita(cardapio.monte, selecoes=[selecao(cardapio.carnes, (cardapio.frango, 2))])],
+            endereco_id=str(endereco.id),
+        )
+    )
+
+    assert resp.status_code == 422
+    assert "Escolha exatamente 1" in resp.json()["detail"]
+    assert _pedidos_do_restaurante(db, restaurante) == 0
+
+
+def test_endereco_de_outro_cliente_retorna_404(db, restaurante, outro_cliente, cardapio, postar):
+    config_entrega(db, restaurante)
+    alheio = CustomerAddress(
+        client_id=outro_cliente.id, street="Rua de Outro", number="1", neighborhood="Bairro"
+    )
+    db.add(alheio)
+    db.flush()
+
+    resp = postar(
+        corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(alheio.id))
+    )
+
+    assert resp.status_code == 404
+
+
+def test_dinheiro_sem_valor_pago_retorna_422(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            endereco_id=str(endereco.id), forma_pagamento="DINHEIRO",
+        )
+    )
+
+    assert resp.status_code == 422
+
+
+def test_dinheiro_com_valor_menor_que_total_retorna_400(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(db, restaurante)
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            endereco_id=str(endereco.id), forma_pagamento="DINHEIRO", valor_pago_dinheiro=20,
+        )
+    )
+
     assert resp.status_code == 400
 
 
-def test_dinheiro_calcula_troco_corretamente(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria, base_price=Decimal("10.00"))
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
+def test_dinheiro_calcula_troco(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
 
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(
-            restaurante, endereco, alimento,
-            forma_pagamento="DINHEIRO", valor_pago_dinheiro=20.00,
-            itens=[{"alimento_id": str(alimento.id), "quantidade": 1, "opcoes_selecionadas": []}],
-        ),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            endereco_id=str(endereco.id), forma_pagamento="DINHEIRO", valor_pago_dinheiro=50,
+        )
     )
-
-    if resp.status_code != 201:
-        print(f"\n[ERRO PAYLOAD] A API disse: {resp.json()}\n")
 
     assert resp.status_code == 201
-    assert resp.json()["valor_troco"] == "10.00"
+    assert resp.json()["valor_troco"] == "17.10"
 
 
-def test_pix_com_valor_pago_retorna_422(db, client, restaurante, cliente, endereco, categoria, config_entrega_gratis, token_para_cliente):
-    alimento = criar_alimento_direto(db, categoria)
-    menu = criar_cardapio_hoje(db, restaurante)
-    criar_item_cardapio(db, menu, alimento)
+def test_pix_com_valor_pago_retorna_422(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante)
 
-    resp = client.post(
-        "/pedidos",
-        json=payload_pedido(restaurante, endereco, alimento, forma_pagamento="PIX", valor_pago_dinheiro=10.00),
-        headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada)],
+            endereco_id=str(endereco.id), forma_pagamento="PIX", valor_pago_dinheiro=10,
+        )
     )
+
     assert resp.status_code == 422
 
 
-# ── cadastro e login de cliente ─────────────────────────────────────
+def test_taxa_por_bairro_ignora_acento_caixa_e_espacos(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(db, restaurante, charge_mode=DeliveryChargeMode.BAIRRO)
+    db.add(
+        DeliveryRuleNeighborhood(
+            restaurant_id=restaurante.id, neighborhood="São José", fee=Decimal("7.50"), is_active=True
+        )
+    )
+    endereco.neighborhood = "  sao   JOSE "
+    db.flush()
+
+    resp = postar(
+        corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(endereco.id))
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["valor_entrega"] == "7.50"
+
+
+def test_bairro_fora_da_area_de_entrega_retorna_422(db, restaurante, endereco, cardapio, postar):
+    config_entrega(db, restaurante, charge_mode=DeliveryChargeMode.BAIRRO)
+    db.add(
+        DeliveryRuleNeighborhood(
+            restaurant_id=restaurante.id, neighborhood="Centro", fee=Decimal("7.50"), is_active=True
+        )
+    )
+    endereco.neighborhood = "Bairro Distante"
+    db.flush()
+
+    resp = postar(
+        corpo_pedido(restaurante, [item_avulso(cardapio.feijoada)], endereco_id=str(endereco.id))
+    )
+
+    assert resp.status_code == 422
+    assert "fora da área de entrega" in resp.json()["detail"]
+
+
+def test_frete_gratis_quando_os_itens_atingem_o_valor(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(
+        db, restaurante, charge_mode=DeliveryChargeMode.FIXO,
+        fixed_fee=Decimal("7.50"), free_delivery_from=Decimal("65.80"),
+    )
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada, 2)], endereco_id=str(endereco.id)
+        )
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["valor_entrega"] == "0.00"
+    assert resp.json()["valor_total"] == "65.80"
+
+
+def test_frete_cobrado_quando_os_itens_ficam_abaixo_do_valor(
+    db, restaurante, endereco, cardapio, postar
+):
+    config_entrega(
+        db, restaurante, charge_mode=DeliveryChargeMode.FIXO,
+        fixed_fee=Decimal("7.50"), free_delivery_from=Decimal("65.81"),
+    )
+
+    resp = postar(
+        corpo_pedido(
+            restaurante, [item_avulso(cardapio.feijoada, 2)], endereco_id=str(endereco.id)
+        )
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["valor_entrega"] == "7.50"
+    assert resp.json()["valor_total"] == "73.30"
+
 
 def test_registrar_cliente_sucesso(client):
     resp = client.post("/clientes/registrar", json={
@@ -323,265 +417,3 @@ def test_login_cliente_senha_errada_retorna_401(db, client):
 
     resp = client.post("/clientes/login", json={"phone": cli.phone, "password": "senha_errada"})
     assert resp.status_code == 401
-
-
-# ── checkout detalhado ──────────────────────────────────────────────
-
-@pytest.fixture
-def cenario_checkout(db, restaurante, categoria, endereco, status_criado, forma_pagamento_dinheiro):
-    """
-    Prepara o ecossistema necessário para um pedido com frete por bairro:
-    Configuração de Entrega (modo BAIRRO), Regra de Entrega do bairro do endereço,
-    Cardápio de Hoje e Complementos.
-    """
-    config_entrega = RestaurantDeliverySettings(
-        restaurant_id=restaurante.id,
-        charge_mode=DeliveryChargeMode.BAIRRO,
-        min_order_value=None,
-    )
-    db.add(config_entrega)
-
-    regra_frete = DeliveryRuleNeighborhood(
-        restaurant_id=restaurante.id,
-        neighborhood=endereco.neighborhood,
-        fee=Decimal("7.50"),
-        is_active=True,
-    )
-    db.add(regra_frete)
-
-    hamburguer = Food(
-        restaurant_id=restaurante.id,
-        category_id=categoria.id,
-        name="Hamburguer Artesanal",
-        base_price=Decimal("25.00"),
-        is_active=True
-    )
-    db.add(hamburguer)
-    db.flush()
-
-    grupo_adicionais = ModifierGroup(
-        name="Adicionais",
-        food_id=hamburguer.id,
-        min_choices=0,
-        max_choices=3,
-    )
-    db.add(grupo_adicionais)
-    db.flush()
-
-    bacon = ModifierOption(
-        group_id=grupo_adicionais.id,
-        name="Adicional de Bacon",
-        extra_price=Decimal("5.00")
-    )
-    db.add(bacon)
-    db.flush()
-
-    cardapio_hoje = Menu(
-        restaurant_id=restaurante.id,
-        date=date.today(),
-    )
-    db.add(cardapio_hoje)
-    db.flush()
-
-    item_hoje = MenuItem(
-        menu_id=cardapio_hoje.id,
-        food_id=hamburguer.id,
-        day_price=Decimal("22.00"),
-        is_available=True
-    )
-    db.add(item_hoje)
-    db.commit()
-
-    return {
-        "alimento": hamburguer,
-        "opcao": bacon,
-        "regra_frete": regra_frete,
-        "config_entrega": config_entrega,
-    }
-
-
-def test_criar_pedido_com_sucesso(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
-    token = token_para_cliente(cliente)
-    headers = {"Authorization": f"Bearer {token}"}
-
-    alimento = cenario_checkout["alimento"]
-    opcao = cenario_checkout["opcao"]
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "DINHEIRO",
-        "valor_pago_dinheiro": 70.00,
-        "itens": [
-            {
-                "alimento_id": str(alimento.id),
-                "quantidade": 2,
-                "opcoes_selecionadas": [
-                    {
-                        "opcao_complemento_id": str(opcao.id),
-                        "quantidade": 2
-                    }
-                ]
-            }
-        ]
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    if response.status_code != 201:
-        print(f"\n[ERRO PAYLOAD] A API disse: {response.json()}\n")
-
-    assert response.status_code == 201
-    dados = response.json()
-
-    assert dados["status"]["codigo"] == status_criado.code
-    assert dados["cliente_id"] == str(cliente.id)
-    assert dados["valor_itens"] == "54.00"
-    assert dados["valor_entrega"] == "7.50"
-    assert dados["valor_total"] == "61.50"
-    assert dados["valor_troco"] == "8.50"
-
-
-def test_deve_rejeitar_pedido_fora_da_area_de_entrega(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente):
-    token = token_para_cliente(cliente)
-    headers = {"Authorization": f"Bearer {token}"}
-    alimento = cenario_checkout["alimento"]
-
-    endereco.neighborhood = "Bairro Distante"
-    db.commit()
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "PIX",
-        "itens": [
-            {
-                "alimento_id": str(alimento.id),
-                "quantidade": 1,
-                "opcoes_selecionadas": []
-            }
-        ]
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    assert response.status_code == 422
-    assert "fora da área de entrega" in response.json()["detail"]
-
-
-def test_deve_rejeitar_item_nao_disponivel_no_cardapio_do_dia(client, db, categoria, cenario_checkout, restaurante, cliente, endereco, token_para_cliente):
-    token = token_para_cliente(cliente)
-    headers = {"Authorization": f"Bearer {token}"}
-
-    pizza = Food(
-        restaurant_id=restaurante.id,
-        category_id=categoria.id,
-        name="Pizza",
-        base_price=Decimal("50.00"),
-        is_active=True
-    )
-    db.add(pizza)
-    db.commit()
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "PIX",
-        "itens": [
-            {
-                "alimento_id": str(pizza.id),
-                "quantidade": 1,
-                "opcoes_selecionadas": []
-            }
-        ]
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    assert response.status_code == 422
-    assert "Itens indisponíveis no cardápio de hoje" in response.json()["detail"]
-
-
-def test_frete_gratis_quando_itens_atingem_o_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
-    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
-    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.00")
-    db.commit()
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "DINHEIRO",
-        "valor_pago_dinheiro": 70.00,
-        "itens": [
-            {
-                "alimento_id": str(cenario_checkout["alimento"].id),
-                "quantidade": 2,
-                "opcoes_selecionadas": [
-                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
-                ],
-            }
-        ],
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    assert response.status_code == 201
-    dados = response.json()
-    assert dados["valor_itens"] == "54.00"
-    assert dados["valor_entrega"] == "0.00"
-    assert dados["valor_total"] == "54.00"
-    assert dados["valor_troco"] == "16.00"
-
-
-def test_frete_cobrado_quando_itens_ficam_abaixo_do_valor(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
-    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
-    cenario_checkout["config_entrega"].free_delivery_from = Decimal("54.01")
-    db.commit()
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "DINHEIRO",
-        "valor_pago_dinheiro": 70.00,
-        "itens": [
-            {
-                "alimento_id": str(cenario_checkout["alimento"].id),
-                "quantidade": 2,
-                "opcoes_selecionadas": [
-                    {"opcao_complemento_id": str(cenario_checkout["opcao"].id), "quantidade": 2}
-                ],
-            }
-        ],
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    assert response.status_code == 201
-    dados = response.json()
-    assert dados["valor_entrega"] == "7.50"
-    assert dados["valor_total"] == "61.50"
-
-
-def test_taxa_por_bairro_ignora_acento_caixa_e_espacos(client, db, cenario_checkout, restaurante, cliente, endereco, token_para_cliente, status_criado):
-    headers = {"Authorization": f"Bearer {token_para_cliente(cliente)}"}
-    cenario_checkout["regra_frete"].neighborhood = "São José"
-    endereco.neighborhood = "  sao   JOSE "
-    db.commit()
-
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "PIX",
-        "itens": [
-            {
-                "alimento_id": str(cenario_checkout["alimento"].id),
-                "quantidade": 1,
-                "opcoes_selecionadas": [],
-            }
-        ],
-    }
-
-    response = client.post("/pedidos", json=payload, headers=headers)
-
-    assert response.status_code == 201
-    assert response.json()["valor_entrega"] == "7.50"

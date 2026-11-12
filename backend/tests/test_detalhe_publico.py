@@ -204,8 +204,6 @@ def _alimento_extra(db, restaurante, cat_composicao):
     f = Food(
         restaurant_id=restaurante.id,
         name="Alimento Extra",
-        base_price=Decimal("10.00"),
-        category_id=cat_composicao.id,
         composition_category_id=cat_composicao.id,
     )
     db.add(f)
@@ -264,6 +262,45 @@ def test_combo_esgotado_hoje_responde_200_indisponivel(db, client, restaurante, 
     corpo = _get(client, restaurante.slug, f"combos/{combo.id}")
     assert corpo["disponivel"] is False
     assert corpo["motivo_indisponivel"] == "esgotado_hoje"
+
+
+def test_combo_com_alimento_esgotado_responde_200_indisponivel(
+    db, client, restaurante, marmita_pronta, alimento_so_venda
+):
+    combo = _combo(
+        db, restaurante, "60.00",
+        marmitas=[(marmita_pronta, 1)], alimentos=[(alimento_so_venda, 1)],
+    )
+    alimento_so_venda.sold_out_on = HOJE
+    db.flush()
+    corpo = _get(client, restaurante.slug, f"combos/{combo.id}")
+    assert corpo["disponivel"] is False
+    assert corpo["motivo_indisponivel"] == "item_indisponivel"
+
+
+def test_combo_com_marmita_fora_do_dia_responde_200_indisponivel(
+    db, client, restaurante, marmita_pronta
+):
+    combo = _combo(db, restaurante, "30.00", marmitas=[(marmita_pronta, 1)])
+    disponibilidade.definir_regra(db, marmita_pronta, "PERSONALIZADO", [(HOJE.weekday() + 1) % 7])
+    corpo = _get(client, restaurante.slug, f"combos/{combo.id}")
+    assert corpo["disponivel"] is False
+    assert corpo["motivo_indisponivel"] == "item_indisponivel"
+
+
+def test_combo_com_alimento_da_marmita_pronta_esgotado_responde_200_indisponivel(
+    db, client, restaurante, marmita_pronta, alimento_arroz
+):
+    marmita_pronta.composition = [
+        MealBoxComposition(food_id=alimento_arroz.id, fixed_quantity=1, position=0)
+    ]
+    db.flush()
+    combo = _combo(db, restaurante, "30.00", marmitas=[(marmita_pronta, 1)])
+    alimento_arroz.sold_out_on = HOJE
+    db.flush()
+    corpo = _get(client, restaurante.slug, f"combos/{combo.id}")
+    assert corpo["disponivel"] is False
+    assert corpo["motivo_indisponivel"] == "item_indisponivel"
 
 
 def test_combo_inativo_da_404(db, client, restaurante, marmita_pronta):

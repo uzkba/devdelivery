@@ -20,7 +20,6 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
     func,
-    inspect as sa_inspect,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -229,17 +228,6 @@ class FoodCategory(Base):
     )
     group: Mapped[str | None] = mapped_column("grupo", String(10), nullable=True)
 
-    # LEGADO (Fase 2)
-    is_main_dish: Mapped[bool] = mapped_column(
-        "prato_principal", Boolean, default=False, server_default="false", nullable=False
-    )
-
-    # LEGADO (Fase 2): Food tem 3 FKs para esta tabela, entao a relacao precisa
-    # dizer qual usar.
-    foods: Mapped[list["Food"]] = relationship(
-        back_populates="category", foreign_keys="Food.category_id"
-    )
-
     __table_args__ = (
         UniqueConstraint("restaurante_id", "nome"),
         CheckConstraint("tipo IN ('composicao', 'venda')", name="ck_categoria_alimento_tipo"),
@@ -258,7 +246,6 @@ class Food(Base):
     name: Mapped[str] = mapped_column("nome", String(120), nullable=False)
     description: Mapped[str | None] = mapped_column("descricao", Text)
 
-    # --- modelo novo
     composition_category_id: Mapped[uuid.UUID | None] = mapped_column(
         "categoria_composicao_id", ForeignKey("categoria_alimento.id")
     )
@@ -284,13 +271,6 @@ class Food(Base):
     carbs_g: Mapped[Decimal | None] = mapped_column("carboidrato_g", Numeric(6, 1))
     fat_g: Mapped[Decimal | None] = mapped_column("gordura_g", Numeric(6, 1))
 
-    # --- LEGADO (Fase 2)
-    category_id: Mapped[uuid.UUID | None] = mapped_column(
-        "categoria_id", ForeignKey("categoria_alimento.id"), nullable=True
-    )
-    base_price: Mapped[Decimal] = mapped_column("preco_base", Numeric(10, 2), default=0, nullable=False)
-    is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
-
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
 
@@ -298,14 +278,6 @@ class Food(Base):
         foreign_keys=[composition_category_id]
     )
     sale_category: Mapped["FoodCategory | None"] = relationship(foreign_keys=[sale_category_id])
-    # LEGADO (Fase 2)
-    category: Mapped["FoodCategory | None"] = relationship(
-        back_populates="foods", foreign_keys=[category_id]
-    )
-    modifier_groups: Mapped[list["ModifierGroup"]] = relationship(
-        back_populates="food", cascade="all, delete-orphan"
-    )
-
     components: Mapped[list["FoodComponent"]] = relationship(
         back_populates="food",
         cascade="all, delete-orphan",
@@ -314,14 +286,13 @@ class Food(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("preco_base >= 0", name="ck_alimento_preco_base_positivo"),  # LEGADO
         CheckConstraint(
             "NOT vendavel_avulso OR (preco_avulso IS NOT NULL AND categoria_venda_id IS NOT NULL)",
             name="ck_alimento_avulso_completo",
         ),
         CheckConstraint("preco_avulso IS NULL OR preco_avulso >= 0", name="ck_alimento_preco_avulso"),
         CheckConstraint(
-            "categoria_id IS NOT NULL OR categoria_composicao_id IS NOT NULL OR categoria_venda_id IS NOT NULL",
+            "categoria_composicao_id IS NOT NULL OR categoria_venda_id IS NOT NULL",
             name="ck_alimento_tem_categoria",
         ),
                 CheckConstraint("serve_pessoas IS NULL OR serve_pessoas BETWEEN 1 AND 50", name="ck_alimento_serve_pessoas"),
@@ -783,10 +754,6 @@ class OrderItem(Base):
     snapshot: Mapped[dict | None] = mapped_column("snapshot_json", JSONB)
 
     order: Mapped["Order"] = relationship(back_populates="items")
-    # LEGADO (Fase 10): substituido por snapshot_json
-    selected_options: Mapped[list["OrderItemOption"]] = relationship(
-        back_populates="order_item", cascade="all, delete-orphan"
-    )
 
     __table_args__ = (
         CheckConstraint("quantidade > 0", name="ck_pedido_item_quantidade"),
@@ -896,114 +863,6 @@ class DeliveryRuleNeighborhood(Base):
     neighborhood: Mapped[str] = mapped_column("bairro", String(120), nullable=False)
     fee: Mapped[Decimal] = mapped_column("taxa", Numeric(10, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True, nullable=False)
-
-
-# ===========================================================================
-# LEGADO - ainda usado pelo codigo atual. NAO criar codigo novo em cima disto.
-# ===========================================================================
-
-
-class ModifierGroup(Base):
-    """LEGADO (remover na Fase 2)."""
-
-    __tablename__ = "grupo_complemento"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id", ondelete="CASCADE"), nullable=False)
-    name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
-    min_choices: Mapped[int] = mapped_column("escolhas_minimas", Integer, default=0, nullable=False)
-    max_choices: Mapped[int] = mapped_column("escolhas_maximas", Integer, nullable=False)
-    display_order: Mapped[int] = mapped_column("ordem_exibicao", Integer, default=0)
-    is_active: Mapped[bool] = mapped_column("ativo", Boolean, default=True)
-
-    food: Mapped["Food"] = relationship(back_populates="modifier_groups")
-    options: Mapped[list["ModifierOption"]] = relationship(back_populates="group", cascade="all, delete-orphan")
-
-    __table_args__ = (CheckConstraint("escolhas_maximas >= escolhas_minimas", name="ck_grupo_complemento_limites"),)
-
-
-class ModifierOption(Base):
-    """LEGADO (remover na Fase 2)."""
-
-    __tablename__ = "opcao_complemento"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    group_id: Mapped[uuid.UUID] = mapped_column("grupo_id", ForeignKey("grupo_complemento.id", ondelete="CASCADE"), nullable=False)
-    name: Mapped[str] = mapped_column("nome", String(60), nullable=False)
-    extra_price: Mapped[Decimal] = mapped_column("preco_adicional", Numeric(10, 2), default=0, nullable=False)
-    is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True)
-
-    group: Mapped["ModifierGroup"] = relationship(back_populates="options")
-
-
-class Menu(Base):
-    """LEGADO (remover na Fase 3)."""
-
-    __tablename__ = "cardapio"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
-    date: Mapped[date] = mapped_column("data", Date, nullable=False)
-    created_by: Mapped[uuid.UUID | None] = mapped_column("criado_por", ForeignKey("usuario_admin.id"))
-    created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-
-    items: Mapped[list["MenuItem"]] = relationship(back_populates="menu", cascade="all, delete-orphan")
-
-    __table_args__ = (UniqueConstraint("restaurante_id", "data"),)
-
-
-class MenuItem(Base):
-    """LEGADO (remover na Fase 3)."""
-
-    __tablename__ = "cardapio_item"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    menu_id: Mapped[uuid.UUID] = mapped_column("cardapio_id", ForeignKey("cardapio.id", ondelete="CASCADE"), nullable=False)
-    food_id: Mapped[uuid.UUID] = mapped_column("alimento_id", ForeignKey("alimento.id"), nullable=False)
-    is_available: Mapped[bool] = mapped_column("disponivel", Boolean, default=True, nullable=False)
-    day_price: Mapped[Decimal | None] = mapped_column("preco_dia", Numeric(10, 2))
-
-    menu: Mapped["Menu"] = relationship(back_populates="items")
-
-    __table_args__ = (
-        UniqueConstraint("cardapio_id", "alimento_id", name="uq_cardapio_item_alimento"),
-        CheckConstraint("preco_dia IS NULL OR preco_dia >= 0", name="ck_cardapio_item_preco_dia"),
-        Index("idx_cardapio_item_disponivel", "cardapio_id", "disponivel"),
-    )
-
-
-class OrderItemOption(Base):
-    """LEGADO (remover na Fase 10)."""
-
-    __tablename__ = "pedido_item_opcao"
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    order_item_id: Mapped[uuid.UUID] = mapped_column("pedido_item_id", ForeignKey("pedido_item.id", ondelete="CASCADE"), nullable=False)
-    modifier_option_id: Mapped[uuid.UUID | None] = mapped_column("opcao_complemento_id", ForeignKey("opcao_complemento.id", ondelete="SET NULL"), nullable=True)
-    option_name: Mapped[str] = mapped_column("nome_opcao", String(60), nullable=False)
-    extra_price: Mapped[Decimal] = mapped_column("preco_adicional_unitario", Numeric(10, 2), default=0, nullable=False)
-    quantity: Mapped[int] = mapped_column("quantidade", Integer, default=1, nullable=False)
-
-    order_item: Mapped["OrderItem"] = relationship(back_populates="selected_options")
-
-    __table_args__ = (
-        CheckConstraint("quantidade > 0", name="ck_pedido_item_opcao_quantidade"),
-        CheckConstraint("preco_adicional_unitario >= 0", name="ck_pedido_item_opcao_preco"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Compatibilidade de transicao (remover na Fase 2, junto com Food.category_id)
-#
-# O cadastro atual de alimento so conhece category_id. Alimento legado e sempre
-# de composicao, entao category_id e copiado para composition_category_id.
-# Alimentos "do modelo novo" (com categoria de venda definida) nao sao tocados.
-# ---------------------------------------------------------------------------
-@event.listens_for(Food, "before_insert")
-def _food_mirror_composition_on_insert(mapper, connection, target):
-    if target.composition_category_id is None and target.sale_category_id is None:
-        target.composition_category_id = target.category_id
-
-
-@event.listens_for(Food, "before_update")
-def _food_mirror_composition_on_update(mapper, connection, target):
-    if target.sale_category_id is None and sa_inspect(target).attrs.category_id.history.has_changes():
-        target.composition_category_id = target.category_id
 
 
 @event.listens_for(FoodCategory, "before_insert")

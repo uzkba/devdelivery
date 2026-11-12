@@ -7,26 +7,28 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.tempo import hoje_local
-from app.model.models import Combo, Food, FoodCategory, MealBox, Order, OrderItem, OrderStatus
+from app.model.models import (
+    Combo,
+    Food,
+    FoodCategory,
+    MealBox,
+    MealBoxKind,
+    Order,
+    OrderItem,
+    OrderStatus,
+)
 from app.services import disponibilidade_service as disponibilidade
 
 _CENTAVOS = Decimal("0.01")
 GRUPOS = ("prato", "bebida")
 
-FUSO_LOCAL = ZoneInfo("America/Sao_Paulo")  # mesmo fuso de app/core/tempo.py
+FUSO_LOCAL = ZoneInfo("America/Sao_Paulo")
 DIAS_MAIS_PEDIDOS = 30
 LIMITE_MAIS_PEDIDOS = 5
 STATUS_IGNORADOS = ("CANCELADO", "RECUSADO")
 
 
 def preco_referencia_combo(combo: Combo) -> Decimal | None:
-    """Soma dos itens avulsos do combo (preco x quantidade).
-
-    Marmita usa `price`; alimento usa `standalone_price` (Food.base_price e
-    legado e e ignorado). Devolve None quando algum item nao tem preco ou
-    quando a economia (soma - preco do combo) e <= 0: nesses casos o
-    cliente nao ve preco "de referencia".
-    """
     total = Decimal("0")
     for item in combo.meal_box_items:
         total += item.meal_box.price * item.quantity
@@ -47,6 +49,41 @@ def _visiveis(db: Session, modelo: type, objetos: list, hoje: date) -> list:
     return [
         o for o in objetos
         if o.id in servem and not disponibilidade.esgotado_hoje(o, hoje)
+    ]
+
+
+def com_componentes_disponiveis(db: Session, combos: list[Combo], hoje: date) -> list[Combo]:
+    marmitas = {i.meal_box.id: i.meal_box for c in combos for i in c.meal_box_items}
+    alimentos = {i.food.id: i.food for c in combos for i in c.food_items}
+    for marmita in marmitas.values():
+        if marmita.kind == MealBoxKind.READY:
+            alimentos.update({i.food.id: i.food for i in marmita.composition})
+
+    servem_marmitas = disponibilidade.servem_hoje(db, MealBox, marmitas.keys(), hoje)
+    servem_alimentos = disponibilidade.servem_hoje(db, Food, alimentos.keys(), hoje)
+
+    def alimento_ok(alimento: Food) -> bool:
+        return (
+            alimento.is_active
+            and alimento.id in servem_alimentos
+            and not disponibilidade.esgotado_hoje(alimento, hoje)
+        )
+
+    def marmita_ok(marmita: MealBox) -> bool:
+        if not (
+            marmita.is_active
+            and marmita.id in servem_marmitas
+            and not disponibilidade.esgotado_hoje(marmita, hoje)
+        ):
+            return False
+        return marmita.kind != MealBoxKind.READY or all(
+            alimento_ok(i.food) for i in marmita.composition
+        )
+
+    return [
+        c for c in combos
+        if all(marmita_ok(i.meal_box) for i in c.meal_box_items)
+        and all(alimento_ok(i.food) for i in c.food_items)
     ]
 
 
@@ -77,8 +114,8 @@ def _combos(db: Session, restaurant_id: uuid.UUID, hoje: date) -> list[dict]:
         .where(Combo.restaurant_id == restaurant_id, Combo.is_active.is_(True))
         .order_by(Combo.name)
     ).all()
-    # so item INATIVO derruba o combo; componente esgotado/fora do dia nao (Fase 6)
-    combos = [c for c in combos if not c.has_inactive_items]
+    # componente inativo, esgotado ou fora do dia derruba o combo (igual ao pedido)
+    combos = com_componentes_disponiveis(db, list(combos), hoje)
     return [
         {
             "id": c.id,

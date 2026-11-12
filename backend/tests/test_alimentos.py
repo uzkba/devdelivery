@@ -2,8 +2,7 @@ import uuid
 import pytest
 from decimal import Decimal
 
-from app.model.models import Restaurant, AdminUser, Food, FoodCategory
-from app.core.seguranca import hash_password
+from app.model.models import Food, FoodCategory
 
 
 @pytest.fixture()
@@ -27,12 +26,10 @@ def categoria_b(db, outro_restaurante):
 def criar_alimento_direto(db, categoria, **overrides):
     dados = dict(
         restaurant_id=categoria.restaurant_id,
-        category_id=categoria.id,
+        composition_category_id=categoria.id,
         name="Item",
         description=None,
-        base_price=Decimal("10.00"),
         is_active=True,
-        is_available=True,
     )
     dados.update(overrides)
     f = Food(**dados)
@@ -46,13 +43,10 @@ def auth(user, token_para):
     return {"Authorization": f"Bearer {token_para(user)}"}
 
 
-# ── POST /alimentos ──────────────────────────────────────────────
-
 def test_criar_alimento_sucesso(client, categoria, admin_user, token_para):
     payload = {
         "nome": "Marmita Fitness",
         "descricao": "Frango grelhado com legumes",
-        "preco_base": "24.90",
         "categoria_id": str(categoria.id),
     }
     resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
@@ -60,59 +54,14 @@ def test_criar_alimento_sucesso(client, categoria, admin_user, token_para):
     assert resp.status_code == 201
     data = resp.json()
     assert data["nome"] == "Marmita Fitness"
-    assert data["disponivel"] is True
-    assert data["grupos_complemento"] == []
-
-
-def test_criar_alimento_com_grupos_complemento_sucesso(client, categoria, admin_user, token_para):
-    """
-    NOVO TESTE: Garante que a estrutura de árvore (Food -> ModifierGroup -> ModifierOption)
-    é criada corretamente através do payload aninhado.
-    """
-    payload = {
-        "nome": "Combo Marmita P",
-        "descricao": "Monte sua marmita",
-        "preco_base": "15.00",
-        "categoria_id": str(categoria.id),
-        "grupos_complemento": [
-            {
-                "nome": "Escolha sua Carne",
-                "escolhas_minimas": 1,
-                "escolhas_maximas": 1,
-                "opcoes": [
-                    {"nome": "Bife Acebolado", "preco_adicional": "0.00", "disponivel": True},
-                    {"nome": "Filé a Parmegiana", "preco_adicional": "4.50", "disponivel": True}
-                ]
-            }
-        ]
-    }
-    
-    resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
-
-    assert resp.status_code == 201
-    data = resp.json()
-    
-    assert data["nome"] == "Combo Marmita P"
-    assert len(data["grupos_complemento"]) == 1
-    
-    grupo = data["grupos_complemento"][0]
-    assert grupo["nome"] == "Escolha sua Carne"
-    assert grupo["escolhas_minimas"] == 1
-    assert grupo["escolhas_maximas"] == 1
-    assert len(grupo["opcoes"]) == 2
-    
-    opcoes_nomes = [op["nome"] for op in grupo["opcoes"]]
-    assert "Bife Acebolado" in opcoes_nomes
-    assert "Filé a Parmegiana" in opcoes_nomes
+    assert data["categoria_id"] == str(categoria.id)
+    assert "preco_base" not in data
+    assert "disponivel" not in data
+    assert "grupos_complemento" not in data
 
 
 def test_criar_alimento_role_nao_admin_e_bloqueado(client, categoria, atendente_user, token_para):
-    payload = {
-        "nome": "Item",
-        "descricao": None,
-        "preco_base": "10.00",
-        "categoria_id": str(categoria.id),
-    }
+    payload = {"nome": "Item", "descricao": None, "categoria_id": str(categoria.id)}
     resp = client.post("/alimentos", json=payload, headers=auth(atendente_user, token_para))
 
     assert resp.status_code == 403
@@ -121,40 +70,18 @@ def test_criar_alimento_role_nao_admin_e_bloqueado(client, categoria, atendente_
 def test_criar_alimento_com_categoria_de_outro_restaurante_da_404(
     client, categoria_b, admin_user, token_para
 ):
-    payload = {
-        "nome": "Suco",
-        "descricao": None,
-        "preco_base": "10.00",
-        "categoria_id": str(categoria_b.id),
-    }
+    payload = {"nome": "Suco", "descricao": None, "categoria_id": str(categoria_b.id)}
     resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
 
     assert resp.status_code == 404
 
 
-@pytest.mark.parametrize("preco", ["-0.01", "-10"])
-def test_criar_alimento_preco_negativo_e_rejeitado(client, categoria, admin_user, token_para, preco):
-    payload = {"nome": "Inválido", "descricao": None, "preco_base": preco, "categoria_id": str(categoria.id)}
-    resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
-
-    assert resp.status_code == 422
-
-
-def test_criar_alimento_preco_zero_e_aceito(client, categoria, admin_user, token_para):
-    payload = {"nome": "Cortesia", "descricao": None, "preco_base": "0", "categoria_id": str(categoria.id)}
-    resp = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
-
-    assert resp.status_code == 201
-
-
 def test_criar_alimento_sem_autenticacao_e_rejeitado(client, categoria):
-    payload = {"nome": "Item", "descricao": None, "preco_base": "10.00", "categoria_id": str(categoria.id)}
+    payload = {"nome": "Item", "descricao": None, "categoria_id": str(categoria.id)}
     resp = client.post("/alimentos", json=payload)
 
     assert resp.status_code == 401
 
-
-# ── GET /alimentos ───────────────────────────────────────────────
 
 def test_listar_esconde_inativos_por_padrao(client, db, categoria, admin_user, token_para):
     ativo = criar_alimento_direto(db, categoria, name="Ativo")
@@ -167,20 +94,9 @@ def test_listar_esconde_inativos_por_padrao(client, db, categoria, admin_user, t
     assert str(inativo.id) not in ids
 
 
-def test_listar_esconde_indisponiveis_por_padrao(client, db, categoria, admin_user, token_para):
-    disponivel = criar_alimento_direto(db, categoria, name="Em estoque")
-    indisponivel = criar_alimento_direto(db, categoria, name="Sem estoque", is_available=False)
-
-    resp = client.get("/alimentos", headers=auth(admin_user, token_para))
-
-    ids = {i["id"] for i in resp.json()}
-    assert str(disponivel.id) in ids
-    assert str(indisponivel.id) not in ids
-
-
 def test_listar_incluir_inativos_true_traz_tudo(client, db, categoria, admin_user, token_para):
     ativo = criar_alimento_direto(db, categoria, name="Ativo")
-    inativo = criar_alimento_direto(db, categoria, name="Inativo", is_active=False, is_available=False)
+    inativo = criar_alimento_direto(db, categoria, name="Inativo", is_active=False)
 
     resp = client.get("/alimentos?incluir_inativos=true", headers=auth(admin_user, token_para))
 
@@ -218,8 +134,6 @@ def test_listar_nao_traz_alimento_de_outro_restaurante(
     assert str(da_b.id) not in ids
 
 
-# ── GET /alimentos/:id ───────────────────────────────────────────
-
 def test_detalhar_alimento_de_outro_restaurante_da_404(client, db, categoria_b, admin_user, token_para):
     alimento_de_b = criar_alimento_direto(db, categoria_b, name="Não é seu")
 
@@ -234,34 +148,19 @@ def test_detalhar_alimento_inexistente_da_404(client, admin_user, token_para):
     assert resp.status_code == 404
 
 
-# ── PUT /alimentos/:id ────────────────────────────────────────────
-
 def test_atualizar_alimento_sucesso(client, db, categoria, admin_user, token_para):
     alimento = criar_alimento_direto(db, categoria, name="Nome Antigo")
 
     resp = client.put(
         f"/alimentos/{alimento.id}",
-        json={"nome": "Nome Novo", "preco_base": "15.50"},
+        json={"nome": "Nome Novo", "descricao": "Descrição nova"},
         headers=auth(admin_user, token_para),
     )
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["nome"] == "Nome Novo"
-    assert Decimal(data["preco_base"]) == Decimal("15.50")
-
-
-def test_atualizar_ignora_campo_disponivel_no_payload(client, db, categoria, admin_user, token_para):
-    alimento = criar_alimento_direto(db, categoria, name="Item", is_available=True)
-
-    resp = client.put(
-        f"/alimentos/{alimento.id}",
-        json={"nome": "Item Editado", "disponivel": False},
-        headers=auth(admin_user, token_para),
-    )
-
-    assert resp.status_code == 200
-    assert resp.json()["disponivel"] is True
+    assert data["descricao"] == "Descrição nova"
 
 
 def test_atualizar_categoria_de_outro_restaurante_da_404(
@@ -277,8 +176,6 @@ def test_atualizar_categoria_de_outro_restaurante_da_404(
 
     assert resp.status_code == 404
 
-
-# ── PUT com null em campo obrigatório (antes dava 500) ───────────
 
 def test_atualizar_nome_null_preserva_o_nome(client, db, categoria, admin_user, token_para):
     alimento = criar_alimento_direto(db, categoria, name="Nome Original")
@@ -296,14 +193,14 @@ def test_atualizar_nome_null_junto_com_outro_campo_aplica_so_o_outro(
 
     r = client.put(
         f"/alimentos/{alimento.id}",
-        json={"nome": None, "preco_base": "12.00"},
+        json={"nome": None, "descricao": "Outra descrição"},
         headers=auth(admin_user, token_para),
     )
 
     assert r.status_code == 200
     d = r.json()
     assert d["nome"] == "Nome Original"
-    assert Decimal(d["preco_base"]) == Decimal("12.00")
+    assert d["descricao"] == "Outra descrição"
 
 
 def test_atualizar_vendavel_avulso_null_preserva_o_estado(
@@ -323,8 +220,6 @@ def test_atualizar_vendavel_avulso_null_preserva_o_estado(
     assert Decimal(d["preco_avulso"]) == Decimal("32.90")
     assert d["categoria_venda_id"] == str(categoria_venda.id)
 
-
-# ── DELETE /alimentos/:id ─────────────────────────────────────────
 
 def test_deletar_alimento_e_soft_delete(client, db, categoria, admin_user, token_para):
     alimento = criar_alimento_direto(db, categoria, name="Item", is_active=True)
@@ -408,7 +303,7 @@ def test_avulso_sem_categoria_de_venda_da_422(client, categoria, admin_user, tok
 
 
 def test_preco_avulso_com_vendavel_false_da_422(client, categoria, admin_user, token_para):
-    payload = {"nome": "X", "preco_base": "10", "categoria_id": str(categoria.id), "preco_avulso": "10"}
+    payload = {"nome": "X", "categoria_id": str(categoria.id), "preco_avulso": "10"}
 
     r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
 
@@ -416,7 +311,7 @@ def test_preco_avulso_com_vendavel_false_da_422(client, categoria, admin_user, t
 
 
 def test_sem_nenhuma_categoria_da_422(client, admin_user, token_para):
-    r = client.post("/alimentos", json={"nome": "Solto", "preco_base": "10"}, headers=auth(admin_user, token_para))
+    r = client.post("/alimentos", json={"nome": "Solto"}, headers=auth(admin_user, token_para))
 
     assert r.status_code == 422
 
@@ -430,7 +325,7 @@ def test_categoria_venda_com_tipo_composicao_da_422(client, categoria, admin_use
 
 
 def test_categoria_composicao_com_tipo_venda_da_422(client, categoria_venda, admin_user, token_para):
-    payload = {"nome": "X", "preco_base": "10", "categoria_id": str(categoria_venda.id)}
+    payload = {"nome": "X", "categoria_id": str(categoria_venda.id)}
 
     r = client.post("/alimentos", json=payload, headers=auth(admin_user, token_para))
 
@@ -502,7 +397,7 @@ def test_atualizar_preco_avulso_em_alimento_nao_avulso_da_422(client, db, catego
 def test_listar_filtra_vendavel_avulso(client, categoria, categoria_venda, admin_user, token_para):
     h = auth(admin_user, token_para)
     client.post("/alimentos", json=_payload_avulso(categoria_venda), headers=h)
-    client.post("/alimentos", json={"nome": "Arroz", "preco_base": "5", "categoria_id": str(categoria.id)}, headers=h)
+    client.post("/alimentos", json={"nome": "Arroz", "categoria_id": str(categoria.id)}, headers=h)
 
     r = client.get("/alimentos?vendavel_avulso=true", headers=h)
 

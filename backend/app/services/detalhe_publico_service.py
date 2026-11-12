@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.tempo import hoje_local
 from app.model.models import Combo, Food, FoodCategory, MealBox, MealBoxKind
 from app.services import disponibilidade_service as disponibilidade
-from app.services.cardapio_publico_service import preco_referencia_combo
+from app.services.cardapio_publico_service import com_componentes_disponiveis, preco_referencia_combo
 
 
 def _nao_encontrado(nome: str) -> HTTPException:
@@ -162,7 +162,10 @@ def detalhar_combo(
             for i in combo.food_items
         ],
         **_disponibilidade(
-            db, combo, hoje, "item_indisponivel" if combo.has_inactive_items else None
+            db,
+            combo,
+            hoje,
+            None if com_componentes_disponiveis(db, [combo], hoje) else "item_indisponivel",
         ),
     }
 
