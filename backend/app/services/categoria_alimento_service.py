@@ -2,7 +2,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.model.models import Food, FoodCategory
@@ -134,12 +134,10 @@ def atualizar_categoria(
 
 
 def _categoria_em_uso(db: Session, categoria: FoodCategory) -> bool:
-    """True se existe alimento ATIVO apontando para a categoria.
-    Composição: considera também o legado Food.category_id."""
     if categoria.type == "venda":
         filtro = Food.sale_category_id == categoria.id
     else:
-        filtro = or_(Food.composition_category_id == categoria.id, Food.category_id == categoria.id)
+        filtro = Food.composition_category_id == categoria.id
     return db.query(Food.id).filter(filtro, Food.is_active.is_(True)).first() is not None
 
 

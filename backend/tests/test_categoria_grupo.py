@@ -19,7 +19,6 @@ def _item_avulso(db, categoria, nome, **extra):
     f = Food(
         restaurant_id=categoria.restaurant_id,
         name=nome,
-        base_price=Decimal("0"),
         sale_category_id=categoria.id,
         is_sellable_alone=True,
         standalone_price=Decimal("10.00"),

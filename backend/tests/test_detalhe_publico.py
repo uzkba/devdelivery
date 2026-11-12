@@ -204,8 +204,6 @@ def _alimento_extra(db, restaurante, cat_composicao):
     f = Food(
         restaurant_id=restaurante.id,
         name="Alimento Extra",
-        base_price=Decimal("10.00"),
-        category_id=cat_composicao.id,
         composition_category_id=cat_composicao.id,
     )
     db.add(f)

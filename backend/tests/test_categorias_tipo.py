@@ -66,8 +66,8 @@ def test_delete_categoria_vazia_desativa(client, db, restaurante, admin_user, to
 
 def test_delete_categoria_composicao_com_alimento_ativo_da_409(client, db, restaurante, admin_user, token_para):
     cat = _criar_categoria_direta(db, restaurante, "Arroz", "composicao")
-    db.add(Food(restaurant_id=restaurante.id, category_id=cat.id, name="Arroz branco",
-                base_price=Decimal("0"), is_active=True))
+    db.add(Food(restaurant_id=restaurante.id, composition_category_id=cat.id, name="Arroz branco",
+                is_active=True))
     db.flush()
 
     r = client.delete(f"/categorias/{cat.id}", headers=auth(admin_user, token_para))
@@ -77,9 +77,9 @@ def test_delete_categoria_composicao_com_alimento_ativo_da_409(client, db, resta
 
 def test_delete_categoria_venda_com_alimento_avulso_ativo_da_409(client, db, restaurante, admin_user, token_para):
     cat = _criar_categoria_direta(db, restaurante, "Feijoadas", "venda")
-    db.add(Food(restaurant_id=restaurante.id, category_id=None, sale_category_id=cat.id,
+    db.add(Food(restaurant_id=restaurante.id, sale_category_id=cat.id,
                 is_sellable_alone=True, standalone_price=Decimal("32.90"),
-                name="Feijoada", base_price=Decimal("0"), is_active=True))
+                name="Feijoada", is_active=True))
     db.flush()
 
     r = client.delete(f"/categorias/{cat.id}", headers=auth(admin_user, token_para))
@@ -89,8 +89,8 @@ def test_delete_categoria_venda_com_alimento_avulso_ativo_da_409(client, db, res
 
 def test_delete_categoria_composicao_com_alimento_inativo_passa(client, db, restaurante, admin_user, token_para):
     cat = _criar_categoria_direta(db, restaurante, "Arroz", "composicao")
-    db.add(Food(restaurant_id=restaurante.id, category_id=cat.id, name="Arroz antigo",
-                base_price=Decimal("0"), is_active=False))
+    db.add(Food(restaurant_id=restaurante.id, composition_category_id=cat.id, name="Arroz antigo",
+                is_active=False))
     db.flush()
 
     r = client.delete(f"/categorias/{cat.id}", headers=auth(admin_user, token_para))

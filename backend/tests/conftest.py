@@ -502,13 +502,10 @@ def _novo_alimento(db, restaurante, nome, categoria=None, **extra):
     dados = dict(
         restaurant_id=restaurante.id,
         name=nome,
-        base_price=Decimal("10.00"),
         is_active=True,
-        is_available=True,
     )
     if categoria is not None:
-        # explicito nos dois campos: nao depende do listener do models.py
-        dados.update(category_id=categoria.id, composition_category_id=categoria.id)
+        dados.update(composition_category_id=categoria.id)
     dados.update(extra)
     f = Food(**dados)
     db.add(f)
