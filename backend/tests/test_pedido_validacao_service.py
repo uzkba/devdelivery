@@ -15,7 +15,7 @@ from app.model.models import (
     MealBoxComposition,
     MealBoxKind,
 )
-from app.schemas.pedido_v2_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
+from app.schemas.pedido_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
 from app.services import disponibilidade_service as disponibilidade
 from app.services import pedido_validacao_service as validacao
 from app.services import cardapio_publico_service as cardapio

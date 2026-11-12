@@ -8,7 +8,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from app.model.models import Food, MealBox, MealBoxKind
-from app.schemas.pedido_v2_schemas import (  # Parte 5: trocar para app.schemas.pedido_schemas
+from app.schemas.pedido_schemas import (
     ItemAvulsoIn,
     ItemComboIn,
     ItemMarmitaIn,

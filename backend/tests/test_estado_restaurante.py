@@ -5,6 +5,8 @@ from app.core.tempo import FUSO_LOCAL, agora_local
 from app.model.models import RestaurantHours
 from app.services import estado_restaurante_service as svc
 
+from tests.helpers_pedido import corpo_pedido, criar_avulso, item_avulso
+
 SEXTA = 4  # 06/11/2026 e uma sexta-feira (weekday 4)
 
 
@@ -249,23 +251,17 @@ def test_post_pedidos_bloqueado_com_restaurante_fechado(
     cliente,
     endereco,
     status_criado,
-    forma_pagamento_pix,
+    cat_venda,
     token_para_cliente,
     monkeypatch,
 ):
     _faixa(db, restaurante, SEXTA, time(11), time(15))
     monkeypatch.setattr(svc, "agora_local", lambda: _em(16))
-    payload = {
-        "restaurante_id": str(restaurante.id),
-        "endereco_id": str(endereco.id),
-        "forma_pagamento": "PIX",
-        "itens": [
-            {"alimento_id": str(uuid.uuid4()), "quantidade": 1, "opcoes_selecionadas": []}
-        ],
-    }
+    feijoada = criar_avulso(db, restaurante, cat_venda, "Feijoada", "20.00")
+    corpo = corpo_pedido(restaurante, [item_avulso(feijoada)], endereco_id=str(endereco.id))
     resposta = client.post(
         "/pedidos",
-        json=payload,
+        json=corpo,
         headers={"Authorization": f"Bearer {token_para_cliente(cliente)}"},
     )
     assert resposta.status_code == 422

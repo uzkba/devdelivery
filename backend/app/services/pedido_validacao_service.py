@@ -1,14 +1,3 @@
-"""Validadores do pedido v2 (Fase 6, Parte 2).
-
-Cada validar_item_* confere o item contra o cadastro do restaurante (nunca confia
-no frontend) e devolve objetos ja resolvidos para a Parte 3 (snapshot e preco).
-Sem efeitos colaterais: so leitura. Todo erro de conteudo e 422 com mensagem em
-portugues; item de outro restaurante e tratado como "nao encontrado".
-
-Regra unica de disponibilidade (item e componentes): ativo, serve hoje
-(regra semanal + excecao por data) e nao esgotado hoje.
-"""
-
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -21,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.tempo import hoje_local
 from app.model.models import Combo, Food, FoodCategory, MealBox, MealBoxKind
-from app.schemas.pedido_v2_schemas import (  # Parte 5: trocar para app.schemas.pedido_schemas
+from app.schemas.pedido_schemas import (
     ItemAvulsoIn,
     ItemComboIn,
     ItemMarmitaIn,

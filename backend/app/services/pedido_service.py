@@ -1,33 +1,25 @@
 import uuid
-from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.depedencias import AuthenticatedClient
+from app.api.dependencias_publicas import get_restaurante_publico
+from app.core.tempo import hoje_local
 from app.model.models import (
     Client,
     CustomerAddress,
-    Food,
-    Menu,
-    MenuItem,
-    ModifierOption,
-    OrderServiceType,
     Order,
     OrderItem,
-    OrderItemOption,
+    OrderServiceType,
     OrderStatus,
     OrderStatusHistory,
     PaymentMethod,
-    Restaurant,
 )
 from app.schemas.pedido_schemas import OrderCreate
 from app.services import entrega_service, pagamento_service
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
-from app.api.dependencias_publicas import get_restaurante_publico
-from app.core.tempo import hoje_local
-from app.schemas.pedido_v2_schemas import OrderCreate as OrderCreateV2
 from app.services.pedido_snapshot_service import montar_item_pedido
 
 
@@ -61,168 +53,7 @@ def _validar_valor_pago_dinheiro(forma_pagamento_codigo: str, valor_pago_dinheir
         )
 
 
-def _buscar_restaurante(db: Session, restaurante_id) -> Restaurant:
-    restaurante = db.query(Restaurant).filter_by(id=restaurante_id).first()
-    if not restaurante:
-        raise HTTPException(status_code=404, detail="Restaurante não encontrado.")
-    return restaurante
-
-
-def _carregar_itens_do_cardapio_hoje(db: Session, restaurante_id, alimento_ids: list) -> dict:
-    itens_cardapio_hoje = (
-        db.query(MenuItem)
-        .join(Menu, MenuItem.menu_id == Menu.id)
-        .filter(
-            Menu.restaurant_id == restaurante_id,
-            Menu.date == date.today(),
-            MenuItem.is_available.is_(True),
-            MenuItem.food_id.in_(alimento_ids),
-        )
-        .all()
-    )
-    cardapio_por_alimento = {mi.food_id: mi for mi in itens_cardapio_hoje}
-
-    faltando = [str(i) for i in alimento_ids if i not in cardapio_por_alimento]
-    if faltando:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Itens indisponíveis no cardápio de hoje: {', '.join(faltando)}",
-        )
-
-    return cardapio_por_alimento
-
-
-def _montar_item_do_pedido(db, pedido_id, item_data, menu_item, alimento, dict_opcoes) -> OrderItem:
-    preco_unitario = menu_item.day_price if menu_item.day_price is not None else alimento.base_price
-
-    novo_item = OrderItem(
-        order_id=pedido_id,
-        food_id=alimento.id,
-        food_name=alimento.name,
-        quantity=item_data.quantidade,
-        base_price=preco_unitario,
-        subtotal=Decimal("0.00"),
-        notes=item_data.observacoes,
-    )
-    db.add(novo_item)
-    db.flush()
-
-    subtotal_item = preco_unitario * item_data.quantidade
-
-    for opcao_data in item_data.opcoes_selecionadas:
-        opcao_db = dict_opcoes.get(opcao_data.opcao_complemento_id)
-        if not opcao_db or not opcao_db.is_available:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Opção {opcao_data.opcao_complemento_id} indisponível.",
-            )
-
-        nova_opcao = OrderItemOption(
-            order_item_id=novo_item.id,
-            modifier_option_id=opcao_db.id,
-            option_name=opcao_db.name,
-            extra_price=opcao_db.extra_price,
-            quantity=opcao_data.quantidade,
-        )
-        db.add(nova_opcao)
-        subtotal_item += opcao_db.extra_price * opcao_data.quantidade
-
-    novo_item.subtotal = subtotal_item
-    return novo_item
-
-
 def criar_pedido(db: Session, payload: OrderCreate, current_client: AuthenticatedClient) -> Order:
-    retirada = payload.tipo_atendimento == OrderServiceType.PICKUP
-
-    status_inicial = _buscar_status_inicial(db)
-    endereco = None if retirada else _buscar_endereco_do_cliente(db, payload.endereco_id, current_client.id)
-    forma_pagamento = _buscar_forma_pagamento(db, payload.forma_pagamento)
-    _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
-    restaurante = _buscar_restaurante(db, payload.restaurante_id)
-    garantir_aceita_pedidos(db, restaurante)
-    pagamento_service.garantir_forma_aceita(db, restaurante.id, forma_pagamento)
-    config_entrega = entrega_service.buscar_configuracao(db, payload.restaurante_id)
-
-    if retirada:
-        entrega_service.garantir_retirada_ativa(config_entrega)
-        delivery_fee = Decimal("0.00")
-    else:
-        entrega_service.garantir_entrega_ativa(config_entrega)
-        delivery_fee = entrega_service.calcular_taxa_entrega(db, restaurante, endereco, config_entrega)
-
-    alimento_ids = [item.alimento_id for item in payload.itens]
-    todas_opcoes_ids = [
-        opcao.opcao_complemento_id for item in payload.itens for opcao in item.opcoes_selecionadas
-    ]
-
-    cardapio_por_alimento = _carregar_itens_do_cardapio_hoje(db, payload.restaurante_id, alimento_ids)
-    alimentos_por_id = {f.id: f for f in db.query(Food).filter(Food.id.in_(alimento_ids)).all()}
-
-    dict_opcoes = {}
-    if todas_opcoes_ids:
-        opcoes_db = db.query(ModifierOption).filter(ModifierOption.id.in_(todas_opcoes_ids)).all()
-        dict_opcoes = {opcao.id: opcao for opcao in opcoes_db}
-
-    novo_pedido = Order(
-        restaurant_id=payload.restaurante_id,
-        client_id=current_client.id,
-        status_id=status_inicial.id,
-        payment_method_id=forma_pagamento.id,
-        service_type=payload.tipo_atendimento,
-        address_name=current_client.name,
-        address_phone=current_client.phone,
-        address_street=endereco.street if endereco else None,
-        address_number=endereco.number if endereco else None,
-        address_neighborhood=endereco.neighborhood if endereco else None,
-        address_complement=endereco.complement if endereco else None,
-        notes=payload.observacoes,
-        delivery_fee=delivery_fee,
-        items_amount=Decimal("0.00"),
-        total_amount=Decimal("0.00"),
-        cash_paid_amount=payload.valor_pago_dinheiro,
-    )
-
-    try:
-        db.add(novo_pedido)
-        db.flush()
-
-        valor_total_itens = Decimal("0.00")
-        for item_data in payload.itens:
-            menu_item = cardapio_por_alimento[item_data.alimento_id]
-            alimento = alimentos_por_id[item_data.alimento_id]
-            novo_item = _montar_item_do_pedido(db, novo_pedido.id, item_data, menu_item, alimento, dict_opcoes)
-            valor_total_itens += novo_item.subtotal
-
-        entrega_service.validar_valor_minimo(config_entrega, valor_total_itens)
-
-        novo_pedido.delivery_fee = entrega_service.aplicar_frete_gratis(
-            config_entrega, valor_total_itens, novo_pedido.delivery_fee
-        )
-        novo_pedido.items_amount = valor_total_itens
-        novo_pedido.total_amount = valor_total_itens + novo_pedido.delivery_fee
-
-        if novo_pedido.cash_paid_amount is not None:
-            if novo_pedido.cash_paid_amount < novo_pedido.total_amount:
-                raise HTTPException(
-                    status_code=400, detail="Valor pago em dinheiro é menor que o total do pedido."
-                )
-            novo_pedido.change_amount = novo_pedido.cash_paid_amount - novo_pedido.total_amount
-
-        db.commit()
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erro ao registrar o pedido.")
-
-    db.refresh(novo_pedido)
-    return novo_pedido
-
-
-def criar_pedido_v2(
-    db: Session, payload: OrderCreateV2, current_client: AuthenticatedClient
-) -> Order:
     restaurante = get_restaurante_publico(payload.restaurante_slug, db)
     garantir_aceita_pedidos(db, restaurante)
 

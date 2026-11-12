@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -6,61 +5,26 @@ from sqlalchemy.exc import IntegrityError
 
 from app.model.models import (
     DeliveryChargeMode,
-    Food,
-    FoodCategory,
-    Menu,
-    MenuItem,
     Order,
     OrderServiceType,
-    RestaurantDeliverySettings,
     PaymentMethod,
 )
+from tests.helpers_pedido import config_entrega, corpo_pedido, criar_avulso, item_avulso
 
 
-# ── fixtures e helpers locais ──
 @pytest.fixture()
-def alimento_do_dia(db, restaurante):
-    categoria = FoodCategory(restaurant_id=restaurante.id, name="Pratos", display_order=0)
-    db.add(categoria)
-    db.flush()
-    alimento = Food(
-        restaurant_id=restaurante.id,
-        category_id=categoria.id,
-        name="Feijoada",
-        base_price=Decimal("20.00"),
-        is_active=True,
-    )
-    db.add(alimento)
-    db.flush()
-    menu = Menu(restaurant_id=restaurante.id, date=date.today())
-    db.add(menu)
-    db.flush()
-    db.add(MenuItem(menu_id=menu.id, food_id=alimento.id, is_available=True))
-    db.flush()
-    return alimento
+def alimento_do_dia(db, restaurante, cat_venda):
+    return criar_avulso(db, restaurante, cat_venda, "Feijoada", "20.00")
 
 
 def _config(db, restaurante, **extra):
-    dados = dict(
-        restaurant_id=restaurante.id,
-        charge_mode=DeliveryChargeMode.FIXO,
-        fixed_fee=Decimal("7.50"),
-    )
+    dados = {"charge_mode": DeliveryChargeMode.FIXO, "fixed_fee": Decimal("7.50")}
     dados.update(extra)
-    config = RestaurantDeliverySettings(**dados)
-    db.add(config)
-    db.flush()
-    return config
+    return config_entrega(db, restaurante, **dados)
 
 
 def _payload(restaurante, alimento, **extra):
-    corpo = {
-        "restaurante_id": str(restaurante.id),
-        "forma_pagamento": "PIX",
-        "itens": [{"alimento_id": str(alimento.id), "quantidade": 1}],
-    }
-    corpo.update(extra)
-    return corpo
+    return corpo_pedido(restaurante, [item_avulso(alimento)], **extra)
 
 
 def _headers(cliente, token_para_cliente):

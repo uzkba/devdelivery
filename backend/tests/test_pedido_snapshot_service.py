@@ -15,7 +15,7 @@ from app.model.models import (
     MealBoxComposition,
     MealBoxKind,
 )
-from app.schemas.pedido_v2_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
+from app.schemas.pedido_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
 from app.services import pedido_snapshot_service as snapshot
 
 HOJE = date(2026, 11, 11)

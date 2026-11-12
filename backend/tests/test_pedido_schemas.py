@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.model.models import OrderServiceType
-from app.schemas.pedido_v2_schemas import (
+from app.schemas.pedido_schemas import (
     ItemAvulsoIn,
     ItemComboIn,
     ItemMarmitaIn,

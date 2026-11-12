@@ -21,7 +21,7 @@ from app.model.models import (
     OrderServiceType,
     RestaurantDeliverySettings,
 )
-from app.schemas.pedido_v2_schemas import OrderCreate
+from app.schemas.pedido_schemas import OrderCreate
 from app.services import pedido_service
 
 
@@ -123,7 +123,7 @@ def _payload(restaurante, itens, endereco=None, **extra):
 
 def _criar(db, payload, cliente):
     auth = AuthenticatedClient(id=cliente.id, name=cliente.name, phone=cliente.phone)
-    return pedido_service.criar_pedido_v2(db, payload, auth)
+    return pedido_service.criar_pedido(db, payload, auth)
 
 
 def _contagens(db):
