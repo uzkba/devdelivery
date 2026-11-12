@@ -208,6 +208,15 @@ class OrderListItemOut(_StatusDoFluxo):
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
 
+class OrderNoticeOut(BaseModel):
+    pedido_id: uuid.UUID
+    numero_pedido: int
+    status: str
+    rotulo: str
+    motivo: Optional[str] = None
+    data_hora: datetime
+
+
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]
     total: int

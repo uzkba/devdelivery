@@ -1,10 +1,10 @@
 import os
-from pathlib import Path
-
-from decimal import Decimal
-from pathlib import Path
-
 import pytest
+
+from datetime import datetime
+from pathlib import Path
+from decimal import Decimal
+
 from alembic import command
 from alembic.config import Config
 from dotenv import load_dotenv
@@ -447,6 +447,21 @@ def criar_pedido_direto(db, restaurante, cliente, endereco):
         db.refresh(pedido)
         return pedido
     return _criar
+
+
+@pytest.fixture()
+def novo_pedido(db, criar_pedido_direto, forma_pagamento_dinheiro):
+    def _novo(codigo="CRIADO", **extra):
+        status = db.query(OrderStatus).filter_by(code=codigo).one()
+        return criar_pedido_direto(
+            status,
+            forma_pagamento_dinheiro,
+            Decimal("25.00"),
+            datetime(2026, 11, 10, 12, 0),
+            **extra,
+        )
+
+    return _novo
 
 
 @pytest.fixture()

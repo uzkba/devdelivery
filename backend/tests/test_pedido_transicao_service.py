@@ -42,16 +42,6 @@ def _usuario(db, restaurante, login, papel, ativo=True):
     return usuario
 
 
-@pytest.fixture()
-def novo_pedido(db, criar_pedido_direto, forma_pagamento_dinheiro):
-    def _novo(codigo="CRIADO", **extra):
-        return criar_pedido_direto(
-            _status(db, codigo), forma_pagamento_dinheiro, Decimal("25.00"), MOMENTO, **extra
-        )
-
-    return _novo
-
-
 def test_fluxo_completo_de_entrega(db, novo_pedido, admin_user, entregador_user):
     pedido = novo_pedido()
 

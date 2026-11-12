@@ -1,5 +1,6 @@
 import math
 import uuid
+from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -15,11 +16,13 @@ from app.core.websockets import manager
 from app.schemas.pedido_schemas import (
     OrderCreate,
     OrderListItemOut,
+    OrderNoticeOut,
     OrderOut,
     OrderReasonIn,
     OrderSendIn,
     PaginatedOrdersOut,
 )
+from app.services import notificacao_service, pedido_fluxo, pedido_service
 from app.services import pedido_fluxo, pedido_service
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
@@ -103,6 +106,26 @@ def listar_meus_pedidos(
     )
 
 
+@router.get("/me/avisos", response_model=List[OrderNoticeOut])
+def listar_meus_avisos(
+    limite: int = Query(30, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_client: AuthenticatedClient = Depends(get_current_client),
+):
+    avisos = pedido_service.listar_avisos_cliente(db, current_client.id, limite)
+    return [
+        OrderNoticeOut(
+            pedido_id=pedido.id,
+            numero_pedido=pedido.order_number,
+            status=novo_status.code,
+            rotulo=pedido_fluxo.rotulo(pedido.service_type, novo_status.code, novo_status.name),
+            motivo=historico.note,
+            data_hora=historico.changed_at,
+        )
+        for historico, pedido, novo_status in avisos
+    ]
+
+
 @router.get("/cliente/{pedido_id}", response_model=OrderOut)
 def buscar_pedido_do_cliente(
     pedido_id: uuid.UUID,
@@ -121,84 +144,115 @@ def buscar_pedido(
     return pedido_service.buscar_pedido_por_id(db, pedido_id, current_user.restaurant_id)
 
 
-def _transicionar(db: Session, pedido_id: uuid.UUID, usuario, codigo: str, **extra):
-    return pedido_service.transicionar_pedido(
+def _transicionar(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    pedido_id: uuid.UUID,
+    usuario,
+    codigo: str,
+    **extra,
+):
+    pedido = pedido_service.transicionar_pedido(
         db, pedido_id, usuario.restaurant_id, usuario.id, codigo, **extra
     )
+    background_tasks.add_task(
+        notificacao_service.publicar_status,
+        pedido.restaurant_id,
+        pedido.client_id,
+        notificacao_service.montar_evento_status(pedido),
+    )
+    return pedido
 
 
 @router.post("/{pedido_id}/aceitar", response_model=OrderOut)
 def aceitar_pedido(
     pedido_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.CONFIRMADO)
+    return _transicionar(db, background_tasks, pedido_id, usuario, pedido_fluxo.CONFIRMADO)
 
 
 @router.post("/{pedido_id}/recusar", response_model=OrderOut)
 def recusar_pedido(
     pedido_id: uuid.UUID,
     payload: OrderReasonIn,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.RECUSADO, motivo=payload.motivo)
+    return _transicionar(
+        db, background_tasks, pedido_id, usuario, pedido_fluxo.RECUSADO, motivo=payload.motivo
+    )
 
 
 @router.post("/{pedido_id}/preparo", response_model=OrderOut)
 def iniciar_preparo(
     pedido_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.EM_PREPARO)
+    return _transicionar(db, background_tasks, pedido_id, usuario, pedido_fluxo.EM_PREPARO)
 
 
 @router.post("/{pedido_id}/pronto", response_model=OrderOut)
 def marcar_pronto(
     pedido_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.PRONTO)
+    return _transicionar(db, background_tasks, pedido_id, usuario, pedido_fluxo.PRONTO)
 
 
 @router.post("/{pedido_id}/enviar", response_model=OrderOut)
 def enviar_pedido(
     pedido_id: uuid.UUID,
     payload: OrderSendIn,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
     return _transicionar(
-        db, pedido_id, usuario, pedido_fluxo.SAIU_PARA_ENTREGA, entregador_id=payload.entregador_id
+        db,
+        background_tasks,
+        pedido_id,
+        usuario,
+        pedido_fluxo.SAIU_PARA_ENTREGA,
+        entregador_id=payload.entregador_id,
     )
 
 
 @router.post("/{pedido_id}/entregue", response_model=OrderOut)
 def marcar_entregue(
     pedido_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.ENTREGUE)
+    return _transicionar(db, background_tasks, pedido_id, usuario, pedido_fluxo.ENTREGUE)
 
 
 @router.post("/{pedido_id}/retirado", response_model=OrderOut)
 def marcar_retirado(
     pedido_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.RETIRADO)
+    return _transicionar(db, background_tasks, pedido_id, usuario, pedido_fluxo.RETIRADO)
 
 
 @router.post("/{pedido_id}/cancelar", response_model=OrderOut)
 def cancelar_pedido(
     pedido_id: uuid.UUID,
     payload: OrderReasonIn,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario=Depends(operador),
 ):
-    return _transicionar(db, pedido_id, usuario, pedido_fluxo.CANCELADO, motivo=payload.motivo)
+    return _transicionar(
+        db, background_tasks, pedido_id, usuario, pedido_fluxo.CANCELADO, motivo=payload.motivo
+    )

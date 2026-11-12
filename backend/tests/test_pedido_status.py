@@ -23,16 +23,6 @@ def _post(client, headers, pedido, acao, corpo=None):
     return client.post(f"/pedidos/{pedido.id}/{acao}", json=corpo, headers=headers)
 
 
-@pytest.fixture()
-def novo_pedido(db, criar_pedido_direto, forma_pagamento_dinheiro):
-    def _novo(codigo="CRIADO", **extra):
-        return criar_pedido_direto(
-            _status(db, codigo), forma_pagamento_dinheiro, Decimal("25.00"), MOMENTO, **extra
-        )
-
-    return _novo
-
-
 def test_aceitar_confirma_e_registra_quem_aceitou(
     client, db, novo_pedido, atendente_user, token_para
 ):

@@ -293,3 +293,17 @@ def transicionar_pedido(
     db.commit()
     db.refresh(pedido)
     return pedido
+
+
+def listar_avisos_cliente(
+    db: Session, client_id: uuid.UUID, limite: int = 30
+) -> list[tuple[OrderStatusHistory, Order, OrderStatus]]:
+    return (
+        db.query(OrderStatusHistory, Order, OrderStatus)
+        .join(Order, Order.id == OrderStatusHistory.order_id)
+        .join(OrderStatus, OrderStatus.id == OrderStatusHistory.new_status_id)
+        .filter(Order.client_id == client_id)
+        .order_by(OrderStatusHistory.changed_at.desc())
+        .limit(limite)
+        .all()
+    )
