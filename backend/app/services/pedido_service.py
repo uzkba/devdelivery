@@ -25,6 +25,10 @@ from app.model.models import (
 from app.schemas.pedido_schemas import OrderCreate
 from app.services import entrega_service, pagamento_service
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
+from app.api.dependencias_publicas import get_restaurante_publico
+from app.core.tempo import hoje_local
+from app.schemas.pedido_v2_schemas import OrderCreate as OrderCreateV2
+from app.services.pedido_snapshot_service import montar_item_pedido
 
 
 def _buscar_status_inicial(db: Session) -> OrderStatus:
@@ -208,6 +212,91 @@ def criar_pedido(db: Session, payload: OrderCreate, current_client: Authenticate
     except HTTPException:
         db.rollback()
         raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao registrar o pedido.")
+
+    db.refresh(novo_pedido)
+    return novo_pedido
+
+
+def criar_pedido_v2(
+    db: Session, payload: OrderCreateV2, current_client: AuthenticatedClient
+) -> Order:
+    restaurante = get_restaurante_publico(payload.restaurante_slug, db)
+    garantir_aceita_pedidos(db, restaurante)
+
+    retirada = payload.tipo_atendimento == OrderServiceType.PICKUP
+    config_entrega = entrega_service.buscar_configuracao(db, restaurante.id)
+    if retirada:
+        entrega_service.garantir_retirada_ativa(config_entrega)
+        endereco = None
+        taxa_base = Decimal("0.00")
+    else:
+        entrega_service.garantir_entrega_ativa(config_entrega)
+        endereco = _buscar_endereco_do_cliente(db, payload.endereco_id, current_client.id)
+        taxa_base = entrega_service.calcular_taxa_entrega(
+            db, restaurante, endereco, config_entrega
+        )
+
+    forma_pagamento = _buscar_forma_pagamento(db, payload.forma_pagamento)
+    _validar_valor_pago_dinheiro(payload.forma_pagamento, payload.valor_pago_dinheiro)
+    pagamento_service.garantir_forma_aceita(db, restaurante.id, forma_pagamento)
+    status_inicial = _buscar_status_inicial(db)
+
+    hoje = hoje_local()
+    itens = [montar_item_pedido(db, restaurante.id, item, hoje) for item in payload.itens]
+
+    valor_itens = sum((item.subtotal for item in itens), Decimal("0.00"))
+    entrega_service.validar_valor_minimo(config_entrega, valor_itens)
+    taxa_entrega = entrega_service.aplicar_frete_gratis(config_entrega, valor_itens, taxa_base)
+    valor_total = valor_itens + taxa_entrega
+
+    troco = None
+    if payload.valor_pago_dinheiro is not None:
+        if payload.valor_pago_dinheiro < valor_total:
+            raise HTTPException(
+                status_code=400, detail="Valor pago em dinheiro é menor que o total do pedido."
+            )
+        troco = payload.valor_pago_dinheiro - valor_total
+
+    novo_pedido = Order(
+        restaurant_id=restaurante.id,
+        client_id=current_client.id,
+        status_id=status_inicial.id,
+        payment_method_id=forma_pagamento.id,
+        service_type=payload.tipo_atendimento,
+        address_name=current_client.name,
+        address_phone=current_client.phone,
+        address_street=endereco.street if endereco else None,
+        address_number=endereco.number if endereco else None,
+        address_neighborhood=endereco.neighborhood if endereco else None,
+        address_complement=endereco.complement if endereco else None,
+        notes=payload.observacoes,
+        items_amount=valor_itens,
+        delivery_fee=taxa_entrega,
+        total_amount=valor_total,
+        cash_paid_amount=payload.valor_pago_dinheiro,
+        change_amount=troco,
+    )
+    for item in itens:
+        novo_pedido.items.append(
+            OrderItem(
+                food_id=item.food_id,
+                meal_box_id=item.meal_box_id,
+                combo_id=item.combo_id,
+                food_name=item.nome,
+                quantity=item.quantidade,
+                base_price=item.preco_unitario,
+                subtotal=item.subtotal,
+                notes=item.observacao,
+                snapshot=item.snapshot,
+            )
+        )
+
+    try:
+        db.add(novo_pedido)
+        db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao registrar o pedido.")
