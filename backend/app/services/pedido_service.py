@@ -8,6 +8,7 @@ from app.api.depedencias import AuthenticatedClient
 from app.api.dependencias_publicas import get_restaurante_publico
 from app.core.tempo import hoje_local
 from app.model.models import (
+    AdminUser,
     Client,
     CustomerAddress,
     Order,
@@ -18,7 +19,7 @@ from app.model.models import (
     PaymentMethod,
 )
 from app.schemas.pedido_schemas import OrderCreate
-from app.services import entrega_service, pagamento_service
+from app.services import entrega_service, pagamento_service, pedido_fluxo
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 from app.services.pedido_snapshot_service import montar_item_pedido
 
@@ -234,4 +235,104 @@ def atualizar_status_pedido(
     db.commit()
     db.refresh(pedido)
     pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()
+    return pedido
+
+
+MOTIVO_MIN = 3
+MOTIVO_MAX = 300
+
+
+def _erro_422(detalhe: str) -> HTTPException:
+    return HTTPException(status_code=422, detail=detalhe)
+
+
+def _normalizar_motivo(novo_codigo: str, motivo: str | None) -> str | None:
+    texto = motivo.strip() if motivo else ""
+    if novo_codigo not in pedido_fluxo.COM_MOTIVO:
+        if texto:
+            raise _erro_422("O motivo só vale para recusa ou cancelamento.")
+        return None
+    if not MOTIVO_MIN <= len(texto) <= MOTIVO_MAX:
+        raise _erro_422(f"Informe o motivo ({MOTIVO_MIN} a {MOTIVO_MAX} caracteres).")
+    return texto
+
+
+def _buscar_entregador(
+    db: Session, restaurant_id: uuid.UUID, entregador_id: uuid.UUID | None
+) -> AdminUser:
+    if entregador_id is None:
+        raise _erro_422("Escolha o entregador para enviar o pedido.")
+    entregador = (
+        db.query(AdminUser)
+        .filter_by(id=entregador_id, restaurant_id=restaurant_id, role="entregador")
+        .first()
+    )
+    if not entregador:
+        raise _erro_422("Entregador não encontrado neste restaurante.")
+    if not entregador.is_active:
+        raise _erro_422(f"O entregador '{entregador.name}' está inativo.")
+    return entregador
+
+
+def transicionar_pedido(
+    db: Session,
+    pedido_id: uuid.UUID,
+    restaurant_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    novo_codigo: str,
+    motivo: str | None = None,
+    entregador_id: uuid.UUID | None = None,
+) -> Order:
+    pedido = (
+        db.query(Order)
+        .filter_by(id=pedido_id, restaurant_id=restaurant_id)
+        .with_for_update(of=Order)
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+
+    novo_status = db.query(OrderStatus).filter_by(code=novo_codigo).first()
+    if not novo_status:
+        raise HTTPException(
+            status_code=500, detail=f"Status '{novo_codigo}' não configurado no banco."
+        )
+
+    status_atual = pedido.status
+    if status_atual.id == novo_status.id:
+        raise _erro_422("O pedido já está neste status.")
+    if not pedido_fluxo.pode_transitar(pedido.service_type, status_atual.code, novo_codigo):
+        if status_atual.is_final:
+            raise _erro_422(
+                f"O pedido já foi finalizado ('{status_atual.name}') e não pode mais mudar."
+            )
+        raise _erro_422(
+            f"Não é possível mudar o pedido de '{status_atual.name}' para '{novo_status.name}'."
+        )
+
+    motivo_limpo = _normalizar_motivo(novo_codigo, motivo)
+
+    entregador = None
+    if novo_codigo == pedido_fluxo.SAIU_PARA_ENTREGA:
+        entregador = _buscar_entregador(db, restaurant_id, entregador_id)
+    elif entregador_id is not None:
+        raise _erro_422("O entregador só é informado ao enviar o pedido.")
+
+    db.add(
+        OrderStatusHistory(
+            order_id=pedido.id,
+            previous_status_id=status_atual.id,
+            new_status_id=novo_status.id,
+            changed_by=usuario_id,
+            note=motivo_limpo,
+        )
+    )
+    pedido.status = novo_status
+    if motivo_limpo:
+        pedido.status_reason = motivo_limpo
+    if entregador:
+        pedido.driver = entregador
+
+    db.commit()
+    db.refresh(pedido)
     return pedido
