@@ -75,3 +75,10 @@ def acoes_disponiveis(tipo: OrderServiceType, atual: str) -> list[str]:
 def rotulo(tipo: OrderServiceType, codigo: str, padrao: str) -> str:
     especificos = ROTULOS_RETIRADA if tipo == OrderServiceType.PICKUP else ROTULOS_ENTREGA
     return especificos.get(codigo) or ROTULOS.get(codigo) or padrao
+
+
+ABAS = {
+    "novos": frozenset({CRIADO}),
+    "em_andamento": frozenset({CONFIRMADO, EM_PREPARO, PRONTO, SAIU_PARA_ENTREGA}),
+    "finalizados": FINAIS,
+}

@@ -1,6 +1,6 @@
 import math
 import uuid
-from typing import List
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -16,12 +16,15 @@ from app.core.websockets import manager
 from app.schemas.pedido_schemas import (
     OrderCreate,
     OrderListItemOut,
+    OrderMonthOut,
     OrderNoticeOut,
     OrderOut,
-    OrderReasonIn,
-    OrderSendIn,
     OrderPaymentHistoryOut,
     OrderPaymentUpdate,
+    OrderReasonIn,
+    OrderSendIn,
+    OrderTabsOut,
+    PaginatedAdminOrdersOut,
     PaginatedOrdersOut,
     ReorderOut,
 )
@@ -58,15 +61,17 @@ def criar_pedido(
     return novo_pedido
 
 
-@router.get("", response_model=PaginatedOrdersOut)
+@router.get("", response_model=PaginatedAdminOrdersOut)
 def listar_pedidos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    q: Optional[str] = Query(None, max_length=100),
+    aba: Optional[Literal["novos", "em_andamento", "finalizados"]] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     resultados, total = pedido_service.listar_pedidos(
-        db, current_user.restaurant_id, page, page_size
+        db, current_user.restaurant_id, page, page_size, q, aba
     )
     items = [
         OrderListItemOut(
@@ -76,9 +81,10 @@ def listar_pedidos(
         )
         for pedido, nome, status_obj in resultados
     ]
-    return PaginatedOrdersOut(
+    return PaginatedAdminOrdersOut(
         items=items, total=total, page=page, page_size=page_size,
         total_pages=math.ceil(total / page_size) if page_size else 0,
+        abas=OrderTabsOut(**pedido_service.contar_abas(db, current_user.restaurant_id, q)),
     )
 
 
@@ -86,13 +92,13 @@ def listar_pedidos(
 def listar_meus_pedidos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    mes: Optional[str] = Query(None, pattern=r"^20\d{2}-(0[1-9]|1[0-2])$"),
     db: Session = Depends(get_db),
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
     resultados, total = pedido_service.listar_pedidos_cliente(
-        db, current_client.id, page, page_size
+        db, current_client.id, page, page_size, mes
     )
-
     items = [
         OrderListItemOut(
             id=pedido.id, numero_pedido=pedido.order_number, cliente_id=pedido.client_id,
@@ -101,11 +107,21 @@ def listar_meus_pedidos(
         )
         for pedido, nome, status_obj in resultados
     ]
-
     return PaginatedOrdersOut(
         items=items, total=total, page=page, page_size=page_size,
         total_pages=math.ceil(total / page_size) if page_size else 0,
     )
+
+
+@router.get("/me/meses", response_model=List[OrderMonthOut])
+def listar_meus_meses(
+    db: Session = Depends(get_db),
+    current_client: AuthenticatedClient = Depends(get_current_client),
+):
+    return [
+        OrderMonthOut(mes=mes, quantidade=quantidade)
+        for mes, quantidade in pedido_service.listar_meses_do_cliente(db, current_client.id)
+    ]
 
 
 @router.get("/me/avisos", response_model=List[OrderNoticeOut])

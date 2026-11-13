@@ -1,7 +1,9 @@
 import uuid
-from decimal import Decimal
 
+from decimal import Decimal
+from collections import Counter
 from fastapi import HTTPException
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.api.depedencias import AuthenticatedClient
@@ -23,6 +25,7 @@ from app.schemas.pedido_schemas import OrderCreate
 from app.services import entrega_service, pagamento_service, pedido_fluxo
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 from app.services.pedido_snapshot_service import montar_item_pedido
+from app.core import periodo
 
 
 def _buscar_status_inicial(db: Session) -> OrderStatus:
@@ -145,11 +148,25 @@ def buscar_pedido_por_id(db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.
     return pedido
 
 
+def _condicao_busca(termo: str | None):
+    texto = (termo or "").strip()
+    if not texto:
+        return None
+    escapado = texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    condicoes = [Client.name.ilike(f"%{escapado}%", escape="\\")]
+    numero = texto.lstrip("#")
+    if numero.isascii() and numero.isdigit() and len(numero) <= 9:
+        condicoes.append(Order.order_number == int(numero))
+    return or_(*condicoes)
+
+
 def listar_pedidos(
     db: Session,
     restaurant_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
+    termo: str | None = None,
+    aba: str | None = None,
 ) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
         db.query(Order, Client.name, OrderStatus)
@@ -157,14 +174,39 @@ def listar_pedidos(
         .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.restaurant_id == restaurant_id)
     )
+    busca = _condicao_busca(termo)
+    if busca is not None:
+        query = query.filter(busca)
+    if aba is not None:
+        query = query.filter(OrderStatus.code.in_(sorted(pedido_fluxo.ABAS[aba])))
+
     total = query.count()
-    resultados = (
-        query.order_by(Order.order_datetime.asc(), Order.order_number.asc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    if aba == "finalizados":
+        ordem = (Order.order_datetime.desc(), Order.order_number.desc())
+    else:
+        ordem = (Order.order_datetime.asc(), Order.order_number.asc())
+    resultados = query.order_by(*ordem).offset((page - 1) * page_size).limit(page_size).all()
     return resultados, total
+
+
+def contar_abas(
+    db: Session, restaurant_id: uuid.UUID, termo: str | None = None
+) -> dict[str, int]:
+    query = (
+        db.query(OrderStatus.code, func.count(Order.id))
+        .select_from(Order)
+        .join(Client, Client.id == Order.client_id)
+        .join(OrderStatus, OrderStatus.id == Order.status_id)
+        .filter(Order.restaurant_id == restaurant_id)
+    )
+    busca = _condicao_busca(termo)
+    if busca is not None:
+        query = query.filter(busca)
+    por_codigo = dict(query.group_by(OrderStatus.code).all())
+    return {
+        aba: sum(por_codigo.get(codigo, 0) for codigo in codigos)
+        for aba, codigos in pedido_fluxo.ABAS.items()
+    }
 
 
 def listar_pedidos_cliente(
@@ -172,6 +214,7 @@ def listar_pedidos_cliente(
     client_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
+    mes: str | None = None,
 ) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
         db.query(Order, Client.name, OrderStatus)
@@ -179,6 +222,9 @@ def listar_pedidos_cliente(
         .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.client_id == client_id)
     )
+    if mes is not None:
+        inicio, fim = periodo.intervalo_do_mes_em_utc(mes)
+        query = query.filter(Order.order_datetime >= inicio, Order.order_datetime < fim)
     total = query.count()
     resultados = (
         query.order_by(Order.order_datetime.desc(), Order.order_number.desc())
@@ -187,6 +233,12 @@ def listar_pedidos_cliente(
         .all()
     )
     return resultados, total
+
+
+def listar_meses_do_cliente(db: Session, client_id: uuid.UUID) -> list[tuple[str, int]]:
+    momentos = db.query(Order.order_datetime).filter(Order.client_id == client_id).all()
+    contagem = Counter(periodo.mes_local(linha[0]) for linha in momentos)
+    return sorted(contagem.items(), reverse=True)
 
 
 def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.UUID) -> Order:

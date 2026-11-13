@@ -258,3 +258,18 @@ class PaginatedOrdersOut(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class OrderTabsOut(BaseModel):
+    novos: int
+    em_andamento: int
+    finalizados: int
+
+
+class PaginatedAdminOrdersOut(PaginatedOrdersOut):
+    abas: OrderTabsOut
+
+
+class OrderMonthOut(BaseModel):
+    mes: str
+    quantidade: int
