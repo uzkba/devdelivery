@@ -217,6 +217,18 @@ class OrderNoticeOut(BaseModel):
     data_hora: datetime
 
 
+class OrderPaymentUpdate(_Entrada):
+    forma_pagamento: Literal["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"]
+    valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0)
+
+
+class OrderPaymentHistoryOut(BaseModel):
+    forma_anterior: PaymentMethodOut
+    forma_nova: PaymentMethodOut
+    alterado_por: Optional[str] = None
+    alterado_em: datetime
+
+
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]
     total: int

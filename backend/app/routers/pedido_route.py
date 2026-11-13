@@ -20,6 +20,8 @@ from app.schemas.pedido_schemas import (
     OrderOut,
     OrderReasonIn,
     OrderSendIn,
+    OrderPaymentHistoryOut,
+    OrderPaymentUpdate,
     PaginatedOrdersOut,
 )
 from app.services import notificacao_service, pedido_fluxo, pedido_service
@@ -156,7 +158,7 @@ def _transicionar(
         db, pedido_id, usuario.restaurant_id, usuario.id, codigo, **extra
     )
     background_tasks.add_task(
-        notificacao_service.publicar_status,
+        notificacao_service.publicar,
         pedido.restaurant_id,
         pedido.client_id,
         notificacao_service.montar_evento_status(pedido),
@@ -256,3 +258,46 @@ def cancelar_pedido(
     return _transicionar(
         db, background_tasks, pedido_id, usuario, pedido_fluxo.CANCELADO, motivo=payload.motivo
     )
+
+
+@router.patch("/{pedido_id}/pagamento", response_model=OrderOut)
+def trocar_forma_pagamento(
+    pedido_id: uuid.UUID,
+    payload: OrderPaymentUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    pedido = pedido_service.trocar_forma_pagamento(
+        db,
+        pedido_id,
+        usuario.restaurant_id,
+        usuario.id,
+        payload.forma_pagamento,
+        payload.valor_pago_dinheiro,
+    )
+    background_tasks.add_task(
+        notificacao_service.publicar,
+        pedido.restaurant_id,
+        pedido.client_id,
+        notificacao_service.montar_evento_pagamento(pedido),
+    )
+    return pedido
+
+
+@router.get("/{pedido_id}/pagamento/historico", response_model=List[OrderPaymentHistoryOut])
+def listar_historico_pagamento(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    registros = pedido_service.listar_historico_pagamento(db, pedido_id, usuario.restaurant_id)
+    return [
+        OrderPaymentHistoryOut(
+            forma_anterior=anterior,
+            forma_nova=nova,
+            alterado_por=nome,
+            alterado_em=historico.changed_at,
+        )
+        for historico, anterior, nova, nome in registros
+    ]

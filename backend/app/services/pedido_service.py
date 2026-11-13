@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.api.depedencias import AuthenticatedClient
 from app.api.dependencias_publicas import get_restaurante_publico
@@ -13,6 +13,7 @@ from app.model.models import (
     CustomerAddress,
     Order,
     OrderItem,
+    OrderPaymentHistory,
     OrderServiceType,
     OrderStatus,
     OrderStatusHistory,
@@ -305,5 +306,76 @@ def listar_avisos_cliente(
         .filter(Order.client_id == client_id)
         .order_by(OrderStatusHistory.changed_at.desc())
         .limit(limite)
+        .all()
+    )
+
+
+def trocar_forma_pagamento(
+    db: Session,
+    pedido_id: uuid.UUID,
+    restaurant_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    codigo: str,
+    valor_pago_dinheiro=None,
+) -> Order:
+    pedido = (
+        db.query(Order)
+        .filter_by(id=pedido_id, restaurant_id=restaurant_id)
+        .with_for_update(of=Order)
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+
+    status_atual = pedido.status
+    if status_atual.is_final:
+        raise _erro_422(
+            f"O pedido já foi finalizado ('{status_atual.name}') e a forma de pagamento não pode mais mudar."
+        )
+
+    nova = _buscar_forma_pagamento(db, codigo)
+    if nova.id == pedido.payment_method_id:
+        raise _erro_422("O pedido já usa esta forma de pagamento.")
+    pagamento_service.garantir_forma_aceita(db, restaurant_id, nova)
+    _validar_valor_pago_dinheiro(codigo, valor_pago_dinheiro)
+
+    troco = None
+    if valor_pago_dinheiro is not None:
+        if valor_pago_dinheiro < pedido.total_amount:
+            raise HTTPException(
+                status_code=400, detail="Valor pago em dinheiro é menor que o total do pedido."
+            )
+        troco = valor_pago_dinheiro - pedido.total_amount
+
+    db.add(
+        OrderPaymentHistory(
+            order_id=pedido.id,
+            previous_payment_method_id=pedido.payment_method_id,
+            new_payment_method_id=nova.id,
+            changed_by=usuario_id,
+        )
+    )
+    pedido.payment_method = nova
+    pedido.cash_paid_amount = valor_pago_dinheiro
+    pedido.change_amount = troco
+
+    db.commit()
+    db.refresh(pedido)
+    return pedido
+
+
+def listar_historico_pagamento(
+    db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.UUID
+) -> list[tuple[OrderPaymentHistory, PaymentMethod, PaymentMethod, str | None]]:
+    buscar_pedido_por_id(db, pedido_id, restaurant_id)
+    anterior = aliased(PaymentMethod)
+    nova = aliased(PaymentMethod)
+    return (
+        db.query(OrderPaymentHistory, anterior, nova, AdminUser.name)
+        .join(anterior, anterior.id == OrderPaymentHistory.previous_payment_method_id)
+        .join(nova, nova.id == OrderPaymentHistory.new_payment_method_id)
+        .outerjoin(AdminUser, AdminUser.id == OrderPaymentHistory.changed_by)
+        .filter(OrderPaymentHistory.order_id == pedido_id)
+        .order_by(OrderPaymentHistory.changed_at.desc())
         .all()
     )

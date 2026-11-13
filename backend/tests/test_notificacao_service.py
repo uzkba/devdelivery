@@ -67,7 +67,7 @@ def test_publicar_so_atinge_o_restaurante_e_o_cliente_do_pedido(monkeypatch):
     asyncio.run(gerenciador.connect_client(sockets["cli"], cliente))
     asyncio.run(gerenciador.connect_client(sockets["outro_cli"], outro_cliente))
 
-    asyncio.run(notificacao_service.publicar_status(restaurante, cliente, {"tipo": "X"}))
+    asyncio.run(notificacao_service.publicar(restaurante, cliente, {"tipo": "X"}))
 
     assert sockets["rest"].recebidas == [{"tipo": "X"}]
     assert sockets["cli"].recebidas == [{"tipo": "X"}]

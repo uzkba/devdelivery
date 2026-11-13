@@ -21,6 +21,17 @@ def montar_evento_status(pedido: Order) -> dict:
     }
 
 
-async def publicar_status(restaurant_id: uuid.UUID, client_id: uuid.UUID, evento: dict) -> None:
+async def publicar(restaurant_id: uuid.UUID, client_id: uuid.UUID, evento: dict) -> None:
     await manager.broadcast_to_restaurant(restaurant_id, evento)
     await manager.broadcast_to_client(client_id, evento)
+
+
+def montar_evento_pagamento(pedido: Order) -> dict:
+    return {
+        "tipo": "PAGAMENTO_PEDIDO",
+        "pedido_id": str(pedido.id),
+        "numero_pedido": pedido.order_number,
+        "forma_pagamento": pedido.payment_method.code,
+        "forma_pagamento_nome": pedido.payment_method.name,
+        "valor_troco": float(pedido.change_amount) if pedido.change_amount is not None else None,
+    }

@@ -793,6 +793,19 @@ class OrderStatusHistory(Base):
     __table_args__ = (Index("idx_historico_status_pedido", "pedido_id", "alterado_em"),)
 
 
+class OrderPaymentHistory(Base):
+    __tablename__ = "historico_pagamento_pedido"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column("pedido_id", ForeignKey("pedido.id", ondelete="CASCADE"), nullable=False)
+    previous_payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_anterior_id", ForeignKey("forma_pagamento.id"), nullable=False)
+    new_payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_nova_id", ForeignKey("forma_pagamento.id"), nullable=False)
+    changed_by: Mapped[uuid.UUID] = mapped_column("usuario_id", ForeignKey("usuario_admin.id"), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column("alterado_em", DateTime, server_default=func.now())
+
+    __table_args__ = (Index("idx_historico_pagamento_pedido", "pedido_id", "alterado_em"),)
+
+
 # ===========================================================================
 # 6. FINANCEIRO (somente fechamento de caixa: nao ha gastos/saldo no admin)
 # ===========================================================================
