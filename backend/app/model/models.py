@@ -708,12 +708,18 @@ class Order(Base):
     cash_paid_amount: Mapped[Decimal | None] = mapped_column("valor_pago_dinheiro", Numeric(10, 2))
     change_amount: Mapped[Decimal | None] = mapped_column("valor_troco", Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column("criado_em", DateTime, server_default=func.now())
-
+    status_reason: Mapped[str | None] = mapped_column("motivo_status", String(300))
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(
+        "entregador_id",
+        ForeignKey("usuario_admin.id", ondelete="SET NULL", name="fk_pedido_entregador"),
+        nullable=True,
+    )
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     status_history: Mapped[list["OrderStatusHistory"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     client: Mapped["Client"] = relationship(lazy="joined")
     status: Mapped["OrderStatus"] = relationship(lazy="joined")
     payment_method: Mapped["PaymentMethod"] = relationship(lazy="joined")
+    driver: Mapped["AdminUser | None"] = relationship(lazy="joined")
 
     __table_args__ = (
         CheckConstraint("valor_itens >= 0", name="ck_pedido_valor_itens"),
@@ -731,6 +737,7 @@ class Order(Base):
         Index("idx_pedido_status", "status_id"),
         Index("idx_pedido_forma_pagamento", "forma_pagamento_id"),
         Index("idx_pedido_restaurante_data_status", "restaurante_id", "data_hora", "status_id"),
+        Index("idx_pedido_entregador", "entregador_id"),
     )
 
 
@@ -784,6 +791,19 @@ class OrderStatusHistory(Base):
     order: Mapped["Order"] = relationship(back_populates="status_history")
 
     __table_args__ = (Index("idx_historico_status_pedido", "pedido_id", "alterado_em"),)
+
+
+class OrderPaymentHistory(Base):
+    __tablename__ = "historico_pagamento_pedido"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column("pedido_id", ForeignKey("pedido.id", ondelete="CASCADE"), nullable=False)
+    previous_payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_anterior_id", ForeignKey("forma_pagamento.id"), nullable=False)
+    new_payment_method_id: Mapped[uuid.UUID] = mapped_column("forma_nova_id", ForeignKey("forma_pagamento.id"), nullable=False)
+    changed_by: Mapped[uuid.UUID] = mapped_column("usuario_id", ForeignKey("usuario_admin.id"), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column("alterado_em", DateTime, server_default=func.now())
+
+    __table_args__ = (Index("idx_historico_pagamento_pedido", "pedido_id", "alterado_em"),)
 
 
 # ===========================================================================

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.model.models import Order, OrderStatus
 
-STATUS_CANCELADO_CODIGO = "CANCELADO"
+STATUS_NAO_FATURAVEIS = ("CANCELADO", "RECUSADO")
 
 class ClienteNaoEncontrado(Exception):
     pass
@@ -56,7 +56,7 @@ def get_relatorio_pedidos(
     )
 
     quantidade_pedidos = sum(linha.quantidade for linha in por_status)
-    faturaveis = [linha for linha in por_status if linha.codigo != STATUS_CANCELADO_CODIGO]
+    faturaveis = [linha for linha in por_status if linha.codigo not in STATUS_NAO_FATURAVEIS]
     valor_total = sum(linha.valor_total for linha in faturaveis)
     pedidos_faturaveis = sum(linha.quantidade for linha in faturaveis)
     ticket_medio = (valor_total / pedidos_faturaveis) if pedidos_faturaveis else 0

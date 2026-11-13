@@ -3,7 +3,10 @@ from decimal import Decimal
 from datetime import datetime
 from typing import Annotated, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from app.model.models import OrderServiceType
+from app.services import pedido_fluxo
 
 from app.model.models import OrderServiceType
 
@@ -106,6 +109,14 @@ class OrderCreate(_Entrada):
         return self
 
 
+class OrderReasonIn(_Entrada):
+    motivo: str
+
+
+class OrderSendIn(_Entrada):
+    entregador_id: uuid.UUID
+
+
 class ClientSummaryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -141,7 +152,25 @@ class OrderItemOut(BaseModel):
     snapshot: Optional[dict] = None
 
 
-class OrderOut(BaseModel):
+class DriverOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nome: str = Field(validation_alias="name")
+
+
+class _StatusDoFluxo(BaseModel):
+    @computed_field
+    @property
+    def status_rotulo(self) -> str:
+        return pedido_fluxo.rotulo(self.tipo_atendimento, self.status.codigo, self.status.nome)
+
+    @computed_field
+    @property
+    def acoes_disponiveis(self) -> List[str]:
+        return pedido_fluxo.acoes_disponiveis(self.tipo_atendimento, self.status.codigo)
+
+
+class OrderOut(_StatusDoFluxo):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
@@ -151,7 +180,8 @@ class OrderOut(BaseModel):
     forma_pagamento: PaymentMethodOut = Field(validation_alias="payment_method")
     data_hora: datetime = Field(validation_alias="order_datetime")
     tipo_atendimento: OrderServiceType = Field(validation_alias="service_type")
-
+    motivo: Optional[str] = Field(default=None, validation_alias="status_reason")
+    entregador: Optional[DriverOut] = Field(default=None, validation_alias="driver")
     endereco_rua: Optional[str] = Field(default=None, validation_alias="address_street")
     endereco_numero: Optional[str] = Field(default=None, validation_alias="address_number")
     endereco_bairro: Optional[str] = Field(default=None, validation_alias="address_neighborhood")
@@ -165,7 +195,7 @@ class OrderOut(BaseModel):
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
 
-class OrderListItemOut(BaseModel):
+class OrderListItemOut(_StatusDoFluxo):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: uuid.UUID
     numero_pedido: int = Field(validation_alias="order_number")
@@ -178,8 +208,48 @@ class OrderListItemOut(BaseModel):
     itens: List[OrderItemOut] = Field(default=[], validation_alias="items")
 
 
-class OrderStatusUpdate(BaseModel):
-    novo_status: str = Field(..., description="Código do novo status (ex: EM_PREPARACAO, ENTREGUE, CANCELADO)")
+class OrderNoticeOut(BaseModel):
+    pedido_id: uuid.UUID
+    numero_pedido: int
+    status: str
+    rotulo: str
+    motivo: Optional[str] = None
+    data_hora: datetime
+
+
+class OrderPaymentUpdate(_Entrada):
+    forma_pagamento: Literal["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"]
+    valor_pago_dinheiro: Optional[Decimal] = Field(default=None, ge=0)
+
+
+class OrderPaymentHistoryOut(BaseModel):
+    forma_anterior: PaymentMethodOut
+    forma_nova: PaymentMethodOut
+    alterado_por: Optional[str] = None
+    alterado_em: datetime
+
+
+class ReorderItemOut(BaseModel):
+    item: ItemPedidoIn
+    nome: str
+    quantidade: int
+    preco_unitario: Decimal
+    preco_anterior: Decimal
+    preco_mudou: bool
+    subtotal: Decimal
+
+
+class ReorderUnavailableOut(BaseModel):
+    nome: str
+    motivo: str
+
+
+class ReorderOut(BaseModel):
+    restaurante_slug: str
+    tipo_atendimento: OrderServiceType
+    itens: List[ReorderItemOut]
+    indisponiveis: List[ReorderUnavailableOut]
+    valor_itens: Decimal
 
 
 class PaginatedOrdersOut(BaseModel):
@@ -188,3 +258,18 @@ class PaginatedOrdersOut(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class OrderTabsOut(BaseModel):
+    novos: int
+    em_andamento: int
+    finalizados: int
+
+
+class PaginatedAdminOrdersOut(PaginatedOrdersOut):
+    abas: OrderTabsOut
+
+
+class OrderMonthOut(BaseModel):
+    mes: str
+    quantidade: int

@@ -1,26 +1,31 @@
 import uuid
-from decimal import Decimal
 
+from decimal import Decimal
+from collections import Counter
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, aliased
 
 from app.api.depedencias import AuthenticatedClient
 from app.api.dependencias_publicas import get_restaurante_publico
 from app.core.tempo import hoje_local
 from app.model.models import (
+    AdminUser,
     Client,
     CustomerAddress,
     Order,
     OrderItem,
+    OrderPaymentHistory,
     OrderServiceType,
     OrderStatus,
     OrderStatusHistory,
     PaymentMethod,
 )
 from app.schemas.pedido_schemas import OrderCreate
-from app.services import entrega_service, pagamento_service
+from app.services import entrega_service, pagamento_service, pedido_fluxo
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 from app.services.pedido_snapshot_service import montar_item_pedido
+from app.core import periodo
 
 
 def _buscar_status_inicial(db: Session) -> OrderStatus:
@@ -143,11 +148,25 @@ def buscar_pedido_por_id(db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.
     return pedido
 
 
+def _condicao_busca(termo: str | None):
+    texto = (termo or "").strip()
+    if not texto:
+        return None
+    escapado = texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    condicoes = [Client.name.ilike(f"%{escapado}%", escape="\\")]
+    numero = texto.lstrip("#")
+    if numero.isascii() and numero.isdigit() and len(numero) <= 9:
+        condicoes.append(Order.order_number == int(numero))
+    return or_(*condicoes)
+
+
 def listar_pedidos(
     db: Session,
     restaurant_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
+    termo: str | None = None,
+    aba: str | None = None,
 ) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
         db.query(Order, Client.name, OrderStatus)
@@ -155,14 +174,39 @@ def listar_pedidos(
         .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.restaurant_id == restaurant_id)
     )
+    busca = _condicao_busca(termo)
+    if busca is not None:
+        query = query.filter(busca)
+    if aba is not None:
+        query = query.filter(OrderStatus.code.in_(sorted(pedido_fluxo.ABAS[aba])))
+
     total = query.count()
-    resultados = (
-        query.order_by(Order.order_datetime.asc(), Order.order_number.asc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    if aba == "finalizados":
+        ordem = (Order.order_datetime.desc(), Order.order_number.desc())
+    else:
+        ordem = (Order.order_datetime.asc(), Order.order_number.asc())
+    resultados = query.order_by(*ordem).offset((page - 1) * page_size).limit(page_size).all()
     return resultados, total
+
+
+def contar_abas(
+    db: Session, restaurant_id: uuid.UUID, termo: str | None = None
+) -> dict[str, int]:
+    query = (
+        db.query(OrderStatus.code, func.count(Order.id))
+        .select_from(Order)
+        .join(Client, Client.id == Order.client_id)
+        .join(OrderStatus, OrderStatus.id == Order.status_id)
+        .filter(Order.restaurant_id == restaurant_id)
+    )
+    busca = _condicao_busca(termo)
+    if busca is not None:
+        query = query.filter(busca)
+    por_codigo = dict(query.group_by(OrderStatus.code).all())
+    return {
+        aba: sum(por_codigo.get(codigo, 0) for codigo in codigos)
+        for aba, codigos in pedido_fluxo.ABAS.items()
+    }
 
 
 def listar_pedidos_cliente(
@@ -170,6 +214,7 @@ def listar_pedidos_cliente(
     client_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
+    mes: str | None = None,
 ) -> tuple[list[tuple[Order, str, OrderStatus]], int]:
     query = (
         db.query(Order, Client.name, OrderStatus)
@@ -177,6 +222,9 @@ def listar_pedidos_cliente(
         .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(Order.client_id == client_id)
     )
+    if mes is not None:
+        inicio, fim = periodo.intervalo_do_mes_em_utc(mes)
+        query = query.filter(Order.order_datetime >= inicio, Order.order_datetime < fim)
     total = query.count()
     resultados = (
         query.order_by(Order.order_datetime.desc(), Order.order_number.desc())
@@ -187,6 +235,12 @@ def listar_pedidos_cliente(
     return resultados, total
 
 
+def listar_meses_do_cliente(db: Session, client_id: uuid.UUID) -> list[tuple[str, int]]:
+    momentos = db.query(Order.order_datetime).filter(Order.client_id == client_id).all()
+    contagem = Counter(periodo.mes_local(linha[0]) for linha in momentos)
+    return sorted(contagem.items(), reverse=True)
+
+
 def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.UUID) -> Order:
     pedido = db.query(Order).filter_by(id=pedido_id, client_id=client_id).first()
     if not pedido:
@@ -194,44 +248,186 @@ def buscar_pedido_do_cliente(db: Session, pedido_id: uuid.UUID, client_id: uuid.
     return pedido
 
 
-def atualizar_status_pedido(
+MOTIVO_MIN = 3
+MOTIVO_MAX = 300
+
+
+def _erro_422(detalhe: str) -> HTTPException:
+    return HTTPException(status_code=422, detail=detalhe)
+
+
+def _normalizar_motivo(novo_codigo: str, motivo: str | None) -> str | None:
+    texto = motivo.strip() if motivo else ""
+    if novo_codigo not in pedido_fluxo.COM_MOTIVO:
+        if texto:
+            raise _erro_422("O motivo só vale para recusa ou cancelamento.")
+        return None
+    if not MOTIVO_MIN <= len(texto) <= MOTIVO_MAX:
+        raise _erro_422(f"Informe o motivo ({MOTIVO_MIN} a {MOTIVO_MAX} caracteres).")
+    return texto
+
+
+def _buscar_entregador(
+    db: Session, restaurant_id: uuid.UUID, entregador_id: uuid.UUID | None
+) -> AdminUser:
+    if entregador_id is None:
+        raise _erro_422("Escolha o entregador para enviar o pedido.")
+    entregador = (
+        db.query(AdminUser)
+        .filter_by(id=entregador_id, restaurant_id=restaurant_id, role="entregador")
+        .first()
+    )
+    if not entregador:
+        raise _erro_422("Entregador não encontrado neste restaurante.")
+    if not entregador.is_active:
+        raise _erro_422(f"O entregador '{entregador.name}' está inativo.")
+    return entregador
+
+
+def transicionar_pedido(
     db: Session,
     pedido_id: uuid.UUID,
-    novo_status_codigo: str,
     restaurant_id: uuid.UUID,
     usuario_id: uuid.UUID,
+    novo_codigo: str,
+    motivo: str | None = None,
+    entregador_id: uuid.UUID | None = None,
 ) -> Order:
-    pedido = db.query(Order).filter_by(id=pedido_id, restaurant_id=restaurant_id).first()
+    pedido = (
+        db.query(Order)
+        .filter_by(id=pedido_id, restaurant_id=restaurant_id)
+        .with_for_update(of=Order)
+        .first()
+    )
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido não encontrado.")
 
-    novo_status = db.query(OrderStatus).filter_by(code=novo_status_codigo).first()
+    novo_status = db.query(OrderStatus).filter_by(code=novo_codigo).first()
     if not novo_status:
-        raise HTTPException(status_code=404, detail=f"Status '{novo_status_codigo}' não existe.")
-
-    status_atual = db.query(OrderStatus).filter_by(id=pedido.status_id).first()
-
-    if status_atual and status_atual.is_final:
         raise HTTPException(
-            status_code=400,
-            detail=f"Pedido está em status final ('{status_atual.code}') e não pode mudar mais.",
+            status_code=500, detail=f"Status '{novo_codigo}' não configurado no banco."
         )
 
-    if status_atual and status_atual.id == novo_status.id:
-        raise HTTPException(status_code=400, detail="O pedido já está neste status.")
+    status_atual = pedido.status
+    if status_atual.id == novo_status.id:
+        raise _erro_422("O pedido já está neste status.")
+    if not pedido_fluxo.pode_transitar(pedido.service_type, status_atual.code, novo_codigo):
+        if status_atual.is_final:
+            raise _erro_422(
+                f"O pedido já foi finalizado ('{status_atual.name}') e não pode mais mudar."
+            )
+        raise _erro_422(
+            f"Não é possível mudar o pedido de '{status_atual.name}' para '{novo_status.name}'."
+        )
+
+    motivo_limpo = _normalizar_motivo(novo_codigo, motivo)
+
+    entregador = None
+    if novo_codigo == pedido_fluxo.SAIU_PARA_ENTREGA:
+        entregador = _buscar_entregador(db, restaurant_id, entregador_id)
+    elif entregador_id is not None:
+        raise _erro_422("O entregador só é informado ao enviar o pedido.")
 
     db.add(
         OrderStatusHistory(
             order_id=pedido.id,
-            previous_status_id=pedido.status_id,
+            previous_status_id=status_atual.id,
             new_status_id=novo_status.id,
             changed_by=usuario_id,
+            note=motivo_limpo,
         )
     )
-
-    pedido.status_id = novo_status.id
+    pedido.status = novo_status
+    if motivo_limpo:
+        pedido.status_reason = motivo_limpo
+    if entregador:
+        pedido.driver = entregador
 
     db.commit()
     db.refresh(pedido)
-    pedido.client = db.query(Client).filter_by(id=pedido.client_id).first()
     return pedido
+
+
+def listar_avisos_cliente(
+    db: Session, client_id: uuid.UUID, limite: int = 30
+) -> list[tuple[OrderStatusHistory, Order, OrderStatus]]:
+    return (
+        db.query(OrderStatusHistory, Order, OrderStatus)
+        .join(Order, Order.id == OrderStatusHistory.order_id)
+        .join(OrderStatus, OrderStatus.id == OrderStatusHistory.new_status_id)
+        .filter(Order.client_id == client_id)
+        .order_by(OrderStatusHistory.changed_at.desc())
+        .limit(limite)
+        .all()
+    )
+
+
+def trocar_forma_pagamento(
+    db: Session,
+    pedido_id: uuid.UUID,
+    restaurant_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    codigo: str,
+    valor_pago_dinheiro=None,
+) -> Order:
+    pedido = (
+        db.query(Order)
+        .filter_by(id=pedido_id, restaurant_id=restaurant_id)
+        .with_for_update(of=Order)
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+
+    status_atual = pedido.status
+    if status_atual.is_final:
+        raise _erro_422(
+            f"O pedido já foi finalizado ('{status_atual.name}') e a forma de pagamento não pode mais mudar."
+        )
+
+    nova = _buscar_forma_pagamento(db, codigo)
+    if nova.id == pedido.payment_method_id:
+        raise _erro_422("O pedido já usa esta forma de pagamento.")
+    pagamento_service.garantir_forma_aceita(db, restaurant_id, nova)
+    _validar_valor_pago_dinheiro(codigo, valor_pago_dinheiro)
+
+    troco = None
+    if valor_pago_dinheiro is not None:
+        if valor_pago_dinheiro < pedido.total_amount:
+            raise HTTPException(
+                status_code=400, detail="Valor pago em dinheiro é menor que o total do pedido."
+            )
+        troco = valor_pago_dinheiro - pedido.total_amount
+
+    db.add(
+        OrderPaymentHistory(
+            order_id=pedido.id,
+            previous_payment_method_id=pedido.payment_method_id,
+            new_payment_method_id=nova.id,
+            changed_by=usuario_id,
+        )
+    )
+    pedido.payment_method = nova
+    pedido.cash_paid_amount = valor_pago_dinheiro
+    pedido.change_amount = troco
+
+    db.commit()
+    db.refresh(pedido)
+    return pedido
+
+
+def listar_historico_pagamento(
+    db: Session, pedido_id: uuid.UUID, restaurant_id: uuid.UUID
+) -> list[tuple[OrderPaymentHistory, PaymentMethod, PaymentMethod, str | None]]:
+    buscar_pedido_por_id(db, pedido_id, restaurant_id)
+    anterior = aliased(PaymentMethod)
+    nova = aliased(PaymentMethod)
+    return (
+        db.query(OrderPaymentHistory, anterior, nova, AdminUser.name)
+        .join(anterior, anterior.id == OrderPaymentHistory.previous_payment_method_id)
+        .join(nova, nova.id == OrderPaymentHistory.new_payment_method_id)
+        .outerjoin(AdminUser, AdminUser.id == OrderPaymentHistory.changed_by)
+        .filter(OrderPaymentHistory.order_id == pedido_id)
+        .order_by(OrderPaymentHistory.changed_at.desc())
+        .all()
+    )
