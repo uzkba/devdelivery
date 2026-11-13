@@ -5,89 +5,22 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 
-from app.model.models import (
-    Combo,
-    ComboFoodItem,
-    ComboMealBoxItem,
-    Food,
-    MealBox,
-    MealBoxCategory,
-    MealBoxComposition,
-    MealBoxKind,
-)
 from app.schemas.pedido_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
 from app.services import pedido_snapshot_service as snapshot
+from tests.helpers_pedido import (
+    criar_alimento as _alimento,
+    criar_avulso as _avulso,
+    criar_pronta as _pronta,
+    criar_personalizavel as _personalizavel,
+    selecao as _sel,
+    criar_combo,
+)
 
 HOJE = date(2026, 11, 11)
 
 
-# --------------------------- helpers ---------------------------
-def _alimento(db, restaurante, nome, composicao=None, venda=None, **extra):
-    f = Food(
-        restaurant_id=restaurante.id,
-        name=nome,
-        composition_category_id=composicao.id if composicao else None,
-        sale_category_id=venda.id if venda else None,
-        **extra,
-    )
-    db.add(f)
-    db.flush()
-    return f
-
-
-def _avulso(db, restaurante, venda, nome, preco):
-    return _alimento(
-        db, restaurante, nome, venda=venda,
-        is_sellable_alone=True, standalone_price=Decimal(preco),
-    )
-
-
-def _pronta(db, restaurante, composicao, nome="Pronta", preco="20.00"):
-    m = MealBox(
-        restaurant_id=restaurante.id, name=nome, kind=MealBoxKind.READY, price=Decimal(preco)
-    )
-    m.composition = [
-        MealBoxComposition(food_id=a.id, fixed_quantity=q, position=i)
-        for i, (a, q) in enumerate(composicao)
-    ]
-    db.add(m)
-    db.flush()
-    return m
-
-
-def _personalizavel(db, restaurante, exigencias, nome="Monte a sua", preco="25.00"):
-    m = MealBox(
-        restaurant_id=restaurante.id, name=nome,
-        kind=MealBoxKind.CUSTOMIZABLE, price=Decimal(preco),
-    )
-    m.categories = [
-        MealBoxCategory(food_category_id=c.id, required_quantity=q, position=i)
-        for i, (c, q) in enumerate(exigencias)
-    ]
-    db.add(m)
-    db.flush()
-    return m
-
-
 def _combo(db, restaurante, marmitas, alimentos, preco="40.00"):
-    c = Combo(restaurant_id=restaurante.id, name="Combo Almoço", price=Decimal(preco))
-    c.meal_box_items = [
-        ComboMealBoxItem(meal_box_id=m.id, quantity=q, position=i)
-        for i, (m, q) in enumerate(marmitas)
-    ]
-    c.food_items = [
-        ComboFoodItem(food_id=a.id, quantity=q, position=i) for i, (a, q) in enumerate(alimentos)
-    ]
-    db.add(c)
-    db.flush()
-    return c
-
-
-def _sel(categoria, *pares):
-    return {
-        "categoria_id": categoria.id,
-        "alimentos": [{"alimento_id": a.id, "quantidade": q} for a, q in pares],
-    }
+    return criar_combo(db, restaurante, marmitas, alimentos, preco=preco)
 
 
 @pytest.fixture()

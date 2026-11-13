@@ -1,6 +1,4 @@
 import uuid
-from datetime import datetime
-from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -8,12 +6,6 @@ from fastapi import HTTPException
 from app.core.seguranca import hash_password
 from app.model.models import AdminUser, OrderServiceType, OrderStatus, OrderStatusHistory
 from app.services import pedido_service
-
-MOMENTO = datetime(2026, 11, 10, 12, 0)
-
-
-def _status(db, codigo):
-    return db.query(OrderStatus).filter_by(code=codigo).one()
 
 
 def _pares(db, pedido):

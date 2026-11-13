@@ -1,18 +1,10 @@
 import uuid
-from datetime import datetime
-from decimal import Decimal
 
 import pytest
 
-from app.model.models import OrderServiceType, OrderStatus, OrderStatusHistory
-
-MOMENTO = datetime(2026, 11, 10, 12, 0)
+from app.model.models import OrderServiceType, OrderStatusHistory
 
 ACOES = ["aceitar", "recusar", "preparo", "pronto", "enviar", "entregue", "retirado", "cancelar"]
-
-
-def _status(db, codigo):
-    return db.query(OrderStatus).filter_by(code=codigo).one()
 
 
 def _headers(token_para, usuario):

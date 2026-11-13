@@ -5,10 +5,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.model.models import (
-    Combo,
-    ComboFoodItem,
-    ComboMealBoxItem,
-    Food,
     FoodCategory,
     MealBox,
     MealBoxCategory,
@@ -19,24 +15,16 @@ from app.schemas.pedido_schemas import ItemAvulsoIn, ItemComboIn, ItemMarmitaIn
 from app.services import disponibilidade_service as disponibilidade
 from app.services import pedido_validacao_service as validacao
 from app.services import cardapio_publico_service as cardapio
+from tests.helpers_pedido import (
+    criar_alimento as _alimento,
+    selecao as _sel,
+    criar_combo,
+)
 
 HOJE = date(2026, 11, 11)  # quarta-feira (weekday 2)
 
 
 # --------------------------- helpers ---------------------------
-def _alimento(db, restaurante, nome, composicao=None, venda=None, **extra):
-    f = Food(
-        restaurant_id=restaurante.id,
-        name=nome,
-        composition_category_id=composicao.id if composicao else None,
-        sale_category_id=venda.id if venda else None,
-        **extra,
-    )
-    db.add(f)
-    db.flush()
-    return f
-
-
 def _avulso(db, restaurante, venda, nome="Feijoada", **extra):
     return _alimento(
         db, restaurante, nome, venda=venda,
@@ -72,24 +60,7 @@ def _marmita_personalizavel(db, restaurante, exigencias, nome="Monte a sua"):
 
 
 def _combo(db, restaurante, marmitas=(), alimentos=()):
-    c = Combo(restaurant_id=restaurante.id, name="Combo", price=Decimal("40.00"))
-    c.meal_box_items = [
-        ComboMealBoxItem(meal_box_id=m.id, quantity=q, position=i)
-        for i, (m, q) in enumerate(marmitas)
-    ]
-    c.food_items = [
-        ComboFoodItem(food_id=a.id, quantity=q, position=i) for i, (a, q) in enumerate(alimentos)
-    ]
-    db.add(c)
-    db.flush()
-    return c
-
-
-def _sel(categoria, *pares):
-    return {
-        "categoria_id": categoria.id,
-        "alimentos": [{"alimento_id": a.id, "quantidade": q} for a, q in pares],
-    }
+    return criar_combo(db, restaurante, marmitas, alimentos, nome="Combo", preco="40.00")
 
 
 def _in_avulso(alimento):

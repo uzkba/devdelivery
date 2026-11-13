@@ -6,108 +6,33 @@ from fastapi import HTTPException
 from app.api.depedencias import AuthenticatedClient
 from app.core.tempo import hoje_local
 from app.model.models import (
-    Combo,
-    ComboFoodItem,
-    ComboMealBoxItem,
     CustomerAddress,
     DeliveryChargeMode,
-    Food,
-    MealBox,
-    MealBoxCategory,
-    MealBoxComposition,
-    MealBoxKind,
     Order,
     OrderItem,
     OrderServiceType,
-    RestaurantDeliverySettings,
 )
 from app.schemas.pedido_schemas import OrderCreate
 from app.services import pedido_service
+from tests.helpers_pedido import (
+    criar_alimento as _alimento,
+    criar_avulso as _avulso,
+    criar_pronta as _pronta,
+    criar_personalizavel as _personalizavel,
+    selecao as _sel,
+    item_avulso as _item_avulso,
+    item_marmita as _item_marmita,
+    config_entrega,
+    criar_combo,
+)
 
 
 def _config(db, restaurante, modo=DeliveryChargeMode.GRATIS, **extra):
-    config = RestaurantDeliverySettings(
-        restaurant_id=restaurante.id, charge_mode=modo, **extra
-    )
-    db.add(config)
-    db.flush()
-    return config
-
-
-def _alimento(db, restaurante, nome, composicao=None, venda=None, **extra):
-    f = Food(
-        restaurant_id=restaurante.id,
-        name=nome,
-        composition_category_id=composicao.id if composicao else None,
-        sale_category_id=venda.id if venda else None,
-        **extra,
-    )
-    db.add(f)
-    db.flush()
-    return f
-
-
-def _avulso(db, restaurante, venda, nome, preco):
-    return _alimento(
-        db, restaurante, nome, venda=venda,
-        is_sellable_alone=True, standalone_price=Decimal(preco),
-    )
-
-
-def _pronta(db, restaurante, composicao, nome="Pronta", preco="20.00"):
-    m = MealBox(
-        restaurant_id=restaurante.id, name=nome, kind=MealBoxKind.READY, price=Decimal(preco)
-    )
-    m.composition = [
-        MealBoxComposition(food_id=a.id, fixed_quantity=q, position=i)
-        for i, (a, q) in enumerate(composicao)
-    ]
-    db.add(m)
-    db.flush()
-    return m
-
-
-def _personalizavel(db, restaurante, exigencias, nome="Monte a sua", preco="25.00"):
-    m = MealBox(
-        restaurant_id=restaurante.id, name=nome,
-        kind=MealBoxKind.CUSTOMIZABLE, price=Decimal(preco),
-    )
-    m.categories = [
-        MealBoxCategory(food_category_id=c.id, required_quantity=q, position=i)
-        for i, (c, q) in enumerate(exigencias)
-    ]
-    db.add(m)
-    db.flush()
-    return m
+    return config_entrega(db, restaurante, charge_mode=modo, **extra)
 
 
 def _combo(db, restaurante, marmitas, alimentos, preco="45.00"):
-    c = Combo(restaurant_id=restaurante.id, name="Combo Almoço", price=Decimal(preco))
-    c.meal_box_items = [
-        ComboMealBoxItem(meal_box_id=m.id, quantity=q, position=i)
-        for i, (m, q) in enumerate(marmitas)
-    ]
-    c.food_items = [
-        ComboFoodItem(food_id=a.id, quantity=q, position=i) for i, (a, q) in enumerate(alimentos)
-    ]
-    db.add(c)
-    db.flush()
-    return c
-
-
-def _sel(categoria, *pares):
-    return {
-        "categoria_id": categoria.id,
-        "alimentos": [{"alimento_id": a.id, "quantidade": q} for a, q in pares],
-    }
-
-
-def _item_avulso(alimento, quantidade=1):
-    return {"tipo": "AVULSO", "alimento_id": alimento.id, "quantidade": quantidade}
-
-
-def _item_marmita(marmita, **extra):
-    return {"tipo": "MARMITA", "marmita_id": marmita.id, **extra}
+    return criar_combo(db, restaurante, marmitas, alimentos, preco=preco)
 
 
 def _payload(restaurante, itens, endereco=None, **extra):
