@@ -23,9 +23,9 @@ from app.schemas.pedido_schemas import (
     OrderPaymentHistoryOut,
     OrderPaymentUpdate,
     PaginatedOrdersOut,
+    ReorderOut,
 )
-from app.services import notificacao_service, pedido_fluxo, pedido_service
-from app.services import pedido_fluxo, pedido_service
+from app.services import notificacao_service, pedido_fluxo, pedido_service, pedir_de_novo_service
 
 router = APIRouter(prefix="/pedidos", tags=["Pedidos"])
 
@@ -135,6 +135,15 @@ def buscar_pedido_do_cliente(
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
     return pedido_service.buscar_pedido_do_cliente(db, pedido_id, current_client.id)
+
+
+@router.get("/cliente/{pedido_id}/repetir", response_model=ReorderOut)
+def repetir_pedido(
+    pedido_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_client: AuthenticatedClient = Depends(get_current_client),
+):
+    return pedir_de_novo_service.montar_repeticao(db, pedido_id, current_client.id)
 
 
 @router.get("/{pedido_id}", response_model=OrderOut)

@@ -229,6 +229,29 @@ class OrderPaymentHistoryOut(BaseModel):
     alterado_em: datetime
 
 
+class ReorderItemOut(BaseModel):
+    item: ItemPedidoIn
+    nome: str
+    quantidade: int
+    preco_unitario: Decimal
+    preco_anterior: Decimal
+    preco_mudou: bool
+    subtotal: Decimal
+
+
+class ReorderUnavailableOut(BaseModel):
+    nome: str
+    motivo: str
+
+
+class ReorderOut(BaseModel):
+    restaurante_slug: str
+    tipo_atendimento: OrderServiceType
+    itens: List[ReorderItemOut]
+    indisponiveis: List[ReorderUnavailableOut]
+    valor_itens: Decimal
+
+
 class PaginatedOrdersOut(BaseModel):
     items: List[OrderListItemOut]
     total: int
