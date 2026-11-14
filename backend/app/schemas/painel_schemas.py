@@ -86,3 +86,20 @@ class HojeOut(_Saida):
     atencao: List[AlertaOut]
     resumo: ResumoDiaOut
     mais_vendidos: List[MaisVendidoOut]
+
+
+class AvisoOut(_Saida):
+    tipo: str
+    gravidade: str
+    titulo: str
+    detalhe: str
+    destino: str
+    quantidade: int
+    pedido_id: Optional[uuid.UUID] = None
+    numero_pedido: Optional[int] = None
+    minutos: Optional[int] = None
+
+
+class AvisosOut(_Saida):
+    total: int
+    avisos: List[AvisoOut]
