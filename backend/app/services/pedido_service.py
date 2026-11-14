@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, aliased
 from app.api.depedencias import AuthenticatedClient
 from app.api.dependencias_publicas import get_restaurante_publico
 from app.core.tempo import hoje_local
+from app.core import periodo
 from app.model.models import (
     AdminUser,
     Client,
@@ -25,13 +26,14 @@ from app.schemas.pedido_schemas import OrderCreate
 from app.services import entrega_service, pagamento_service, pedido_fluxo
 from app.services.estado_restaurante_service import garantir_aceita_pedidos
 from app.services.pedido_snapshot_service import montar_item_pedido
-from app.core import periodo
 
 
 def _buscar_status_inicial(db: Session) -> OrderStatus:
-    status_inicial = db.query(OrderStatus).order_by(OrderStatus.order.asc()).first()
+    status_inicial = db.query(OrderStatus).filter_by(code=pedido_fluxo.CRIADO).first()
     if not status_inicial:
-        raise HTTPException(status_code=500, detail="Nenhum status de pedido configurado no banco.")
+        raise HTTPException(
+            status_code=500, detail="Status inicial do pedido não configurado no banco."
+        )
     return status_inicial
 
 
@@ -429,5 +431,18 @@ def listar_historico_pagamento(
         .outerjoin(AdminUser, AdminUser.id == OrderPaymentHistory.changed_by)
         .filter(OrderPaymentHistory.order_id == pedido_id)
         .order_by(OrderPaymentHistory.changed_at.desc())
+        .all()
+    )
+
+
+def listar_entregadores(db: Session, restaurant_id: uuid.UUID) -> list[AdminUser]:
+    return (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.restaurant_id == restaurant_id,
+            AdminUser.role == "entregador",
+            AdminUser.is_active.is_(True),
+        )
+        .order_by(AdminUser.name)
         .all()
     )

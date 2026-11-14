@@ -14,6 +14,7 @@ from app.api.depedencias import (
 from app.core.database import get_db
 from app.core.websockets import manager
 from app.schemas.pedido_schemas import (
+    DriverOut,
     OrderCreate,
     OrderListItemOut,
     OrderMonthOut,
@@ -160,6 +161,14 @@ def repetir_pedido(
     current_client: AuthenticatedClient = Depends(get_current_client),
 ):
     return pedir_de_novo_service.montar_repeticao(db, pedido_id, current_client.id)
+
+
+@router.get("/entregadores", response_model=List[DriverOut])
+def listar_entregadores(
+    db: Session = Depends(get_db),
+    usuario=Depends(operador),
+):
+    return pedido_service.listar_entregadores(db, usuario.restaurant_id)
 
 
 @router.get("/{pedido_id}", response_model=OrderOut)
