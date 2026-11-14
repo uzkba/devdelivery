@@ -8,8 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 from app.model.models import OrderServiceType
 from app.services import pedido_fluxo
 
-from app.model.models import OrderServiceType
-
 OBSERVACAO_ITEM_MAX = 140
 
 

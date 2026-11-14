@@ -1,10 +1,9 @@
 import os
 import pytest
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from decimal import Decimal
-
 from alembic import command
 from alembic.config import Config
 from dotenv import load_dotenv
@@ -26,10 +25,13 @@ from main import app
 from app.core.database import get_db
 from app.core.seguranca import hash_password
 from app.routers.autenticacao_route import create_access_token
+from app.services import pedido_fluxo
 from app.model.models import (
     AdminUser,
     Order,
+    OrderItem,
     OrderStatus,
+    OrderStatusHistory,
     PaymentMethod,
     Restaurant,
     Client,
@@ -619,3 +621,77 @@ def alimento_bebida(db, restaurante, cat_venda_bebida):
         is_sellable_alone=True,
         standalone_price=Decimal("8.00"),
     )
+
+
+ORDEM_STATUS = {
+    "CRIADO": 1,
+    "CONFIRMADO": 2,
+    "EM_PREPARO": 3,
+    "PRONTO": 4,
+    "SAIU_PARA_ENTREGA": 5,
+    "ENTREGUE": 6,
+    "RETIRADO": 7,
+    "CANCELADO": 8,
+    "RECUSADO": 9,
+}
+
+
+def _status_por_codigo(db, codigo):
+    return _get_or_create_status(
+        db, codigo, codigo, ORDEM_STATUS[codigo], codigo in pedido_fluxo.FINAIS
+    )
+
+
+@pytest.fixture()
+def pedido_em(db, criar_pedido_direto, forma_pagamento_dinheiro):
+    def _criar(codigo, criado_em, total="20.00", **extra):
+        return criar_pedido_direto(
+            _status_por_codigo(db, codigo),
+            forma_pagamento_dinheiro,
+            Decimal(total),
+            criado_em,
+            **extra,
+        )
+
+    return _criar
+
+
+@pytest.fixture()
+def registrar_mudanca(db):
+    def _registrar(pedido, codigo, momento):
+        registro = OrderStatusHistory(
+            order_id=pedido.id,
+            new_status_id=_status_por_codigo(db, codigo).id,
+            changed_at=momento,
+        )
+        db.add(registro)
+        db.flush()
+        return registro
+
+    return _registrar
+
+
+@pytest.fixture()
+def adicionar_item(db):
+    def _adicionar(pedido, nome, quantidade, preco="10.00", **ids):
+        item = OrderItem(
+            order_id=pedido.id,
+            food_name=nome,
+            quantity=quantidade,
+            base_price=Decimal(preco),
+            subtotal=Decimal(preco) * quantidade,
+            **ids,
+        )
+        db.add(item)
+        db.flush()
+        return item
+
+    return _adicionar
+
+
+@pytest.fixture()
+def utc_ha_minutos():
+    def _momento(minutos=0):
+        return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutos)
+
+    return _momento
