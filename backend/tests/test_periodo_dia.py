@@ -43,3 +43,7 @@ def test_rotulo_semana_passada_concorda_com_o_genero():
     assert periodo.rotulo_semana_passada(date(2026, 11, 12)) == "quinta passada"
     assert periodo.rotulo_semana_passada(date(2026, 11, 14)) == "sábado passado"
     assert periodo.rotulo_semana_passada(date(2026, 11, 15)) == "domingo passado"
+
+
+def test_agora_em_utc_devolve_utc_sem_fuso():
+    assert periodo.agora_em_utc(_utc(2026, 11, 14, 18, 30)) == datetime(2026, 11, 14, 18, 30)

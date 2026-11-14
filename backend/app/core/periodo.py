@@ -54,3 +54,7 @@ def janelas_comparaveis(agora: datetime | None = None) -> tuple[JanelaDoDia, Jan
 def rotulo_semana_passada(dia: date) -> str:
     sufixo = "passado" if dia.weekday() >= 5 else "passada"
     return f"{NOMES_DIA_SEMANA[dia.weekday()]} {sufixo}"
+
+
+def agora_em_utc(agora: datetime | None = None) -> datetime:
+    return _utc_sem_fuso(agora_local(agora))
