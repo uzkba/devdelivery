@@ -20,6 +20,7 @@ from app.routers import (
     bairro_entrega_route,
     pagamento_admin_route,
     ws_notificacoes_route,
+    painel_route,
 )
 
 app = FastAPI(
@@ -55,6 +56,7 @@ app.include_router(entrega_admin_route.router)
 app.include_router(bairro_entrega_route.router)
 app.include_router(pagamento_admin_route.router)
 app.include_router(ws_notificacoes_route.router)
+app.include_router(painel_route.router)
 
 for _router in disponibilidade_route.routers:
     app.include_router(_router)

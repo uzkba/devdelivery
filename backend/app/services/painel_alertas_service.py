@@ -256,10 +256,15 @@ def _alertas_de_caixa(
 
 
 def alertas_de_atencao(
-    db: Session, restaurant_id: uuid.UUID, agora: datetime | None = None
+    db: Session,
+    restaurant_id: uuid.UUID,
+    agora: datetime | None = None,
+    atrasos: dict[uuid.UUID, AtrasoPedido] | None = None,
 ) -> list[Alerta]:
+    if atrasos is None:
+        atrasos = atrasos_dos_pedidos(db, restaurant_id, agora)
     return [
-        *_alertas_de_pedidos(atrasos_dos_pedidos(db, restaurant_id, agora)),
+        *_alertas_de_pedidos(atrasos),
         *_alertas_de_itens(itens_indisponiveis_hoje(db, restaurant_id, agora)),
         *_alertas_de_caixa(db, restaurant_id, agora),
     ]
