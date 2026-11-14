@@ -1,41 +1,20 @@
 from datetime import datetime, timezone
-from decimal import Decimal
 
-from app.model.models import OrderItem
 from app.services import painel_ranking_service as service
 
 AGORA = datetime(2026, 11, 14, 18, 30, tzinfo=timezone.utc)
 DENTRO = datetime(2026, 11, 14, 14, 0)
 
 
-def _item(db, pedido, nome, quantidade, **ids):
-    db.add(
-        OrderItem(
-            order_id=pedido.id,
-            food_name=nome,
-            quantity=quantidade,
-            base_price=Decimal("10.00"),
-            subtotal=Decimal("10.00") * quantidade,
-            **ids,
-        )
-    )
-    db.flush()
-
-
-def _pedido(criar_pedido_direto, status, pagto, momento=DENTRO, **extra):
-    return criar_pedido_direto(status, pagto, Decimal("10.00"), momento, **extra)
-
-
 def test_ordena_por_quantidade_e_soma_entre_pedidos(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado,
-    marmita_pronta, combo_teste, alimento_so_venda,
+    db, restaurante, pedido_em, adicionar_item, marmita_pronta, combo_teste, alimento_so_venda
 ):
-    p1 = _pedido(criar_pedido_direto, status_criado, forma_pagamento_dinheiro)
-    p2 = _pedido(criar_pedido_direto, status_criado, forma_pagamento_dinheiro)
-    _item(db, p1, "Marmita Pronta", 3, meal_box_id=marmita_pronta.id)
-    _item(db, p2, "Marmita Pronta", 2, meal_box_id=marmita_pronta.id)
-    _item(db, p1, "Feijoada", 4, food_id=alimento_so_venda.id)
-    _item(db, p2, "Combo Teste", 2, combo_id=combo_teste.id)
+    p1 = pedido_em("CRIADO", DENTRO)
+    p2 = pedido_em("CRIADO", DENTRO)
+    adicionar_item(p1, "Marmita Pronta", 3, meal_box_id=marmita_pronta.id)
+    adicionar_item(p2, "Marmita Pronta", 2, meal_box_id=marmita_pronta.id)
+    adicionar_item(p1, "Feijoada", 4, food_id=alimento_so_venda.id)
+    adicionar_item(p2, "Combo Teste", 2, combo_id=combo_teste.id)
 
     ranking = service.mais_vendidos_hoje(db, restaurante.id, agora=AGORA)
 
@@ -50,13 +29,12 @@ def test_ordena_por_quantidade_e_soma_entre_pedidos(
 
 
 def test_respeita_o_limite(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado,
-    marmita_pronta, combo_teste, alimento_so_venda,
+    db, restaurante, pedido_em, adicionar_item, marmita_pronta, combo_teste, alimento_so_venda
 ):
-    pedido = _pedido(criar_pedido_direto, status_criado, forma_pagamento_dinheiro)
-    _item(db, pedido, "Marmita Pronta", 3, meal_box_id=marmita_pronta.id)
-    _item(db, pedido, "Feijoada", 2, food_id=alimento_so_venda.id)
-    _item(db, pedido, "Combo Teste", 1, combo_id=combo_teste.id)
+    pedido = pedido_em("CRIADO", DENTRO)
+    adicionar_item(pedido, "Marmita Pronta", 3, meal_box_id=marmita_pronta.id)
+    adicionar_item(pedido, "Feijoada", 2, food_id=alimento_so_venda.id)
+    adicionar_item(pedido, "Combo Teste", 1, combo_id=combo_teste.id)
 
     ranking = service.mais_vendidos_hoje(db, restaurante.id, limite=2, agora=AGORA)
 
@@ -64,20 +42,16 @@ def test_respeita_o_limite(
 
 
 def test_ignora_cancelados_outros_dias_e_outros_restaurantes(
-    db, restaurante, outro_restaurante, criar_pedido_direto, forma_pagamento_dinheiro,
-    status_criado, status_cancelado, marmita_pronta, alimento_so_venda,
+    db, restaurante, outro_restaurante, pedido_em, adicionar_item, marmita_pronta
 ):
-    pagto = forma_pagamento_dinheiro
-    valido = _pedido(criar_pedido_direto, status_criado, pagto)
-    cancelado = _pedido(criar_pedido_direto, status_cancelado, pagto)
-    ontem = _pedido(criar_pedido_direto, status_criado, pagto, datetime(2026, 11, 13, 14, 0))
-    outro = _pedido(
-        criar_pedido_direto, status_criado, pagto, restaurant_id=outro_restaurante.id
-    )
-    _item(db, valido, "Marmita Pronta", 1, meal_box_id=marmita_pronta.id)
-    _item(db, cancelado, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
-    _item(db, ontem, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
-    _item(db, outro, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
+    valido = pedido_em("CRIADO", DENTRO)
+    cancelado = pedido_em("CANCELADO", DENTRO)
+    ontem = pedido_em("CRIADO", datetime(2026, 11, 13, 14, 0))
+    outro = pedido_em("CRIADO", DENTRO, restaurant_id=outro_restaurante.id)
+    adicionar_item(valido, "Marmita Pronta", 1, meal_box_id=marmita_pronta.id)
+    adicionar_item(cancelado, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
+    adicionar_item(ontem, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
+    adicionar_item(outro, "Marmita Pronta", 50, meal_box_id=marmita_pronta.id)
 
     ranking = service.mais_vendidos_hoje(db, restaurante.id, agora=AGORA)
 
@@ -85,12 +59,12 @@ def test_ignora_cancelados_outros_dias_e_outros_restaurantes(
 
 
 def test_itens_sem_vinculo_agrupam_pelo_nome_do_pedido(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado,
+    db, restaurante, pedido_em, adicionar_item
 ):
-    pedido = _pedido(criar_pedido_direto, status_criado, forma_pagamento_dinheiro)
-    _item(db, pedido, "Pudim", 2)
-    _item(db, pedido, "Pudim", 1)
-    _item(db, pedido, "Mousse", 1)
+    pedido = pedido_em("CRIADO", DENTRO)
+    adicionar_item(pedido, "Pudim", 2)
+    adicionar_item(pedido, "Pudim", 1)
+    adicionar_item(pedido, "Mousse", 1)
 
     ranking = service.mais_vendidos_hoje(db, restaurante.id, agora=AGORA)
 

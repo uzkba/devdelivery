@@ -1,15 +1,10 @@
-from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from datetime import date, datetime, time, timezone
 
 from app.core.tempo import hoje_local
-from app.model.models import OrderItem, RestaurantHours
+from app.model.models import RestaurantHours
 from app.services import painel_hoje_service as service
 
 AGORA = datetime(2026, 11, 14, 18, 30, tzinfo=timezone.utc)
-
-
-def _utc_naive(minutos_atras=0):
-    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutos_atras)
 
 
 def _faixa(db, restaurante, abre, fecha):
@@ -22,22 +17,11 @@ def _faixa(db, restaurante, abre, fecha):
 
 
 def test_monta_o_painel_completo_com_dados_consistentes(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro,
-    status_criado, status_entregue, marmita_pronta,
+    db, restaurante, pedido_em, adicionar_item, marmita_pronta
 ):
-    pagto = forma_pagamento_dinheiro
-    parado = criar_pedido_direto(status_criado, pagto, Decimal("30.00"), datetime(2026, 11, 14, 18, 0))
-    entregue = criar_pedido_direto(status_entregue, pagto, Decimal("50.00"), datetime(2026, 11, 14, 16, 0))
-    db.add(
-        OrderItem(
-            order_id=entregue.id,
-            meal_box_id=marmita_pronta.id,
-            food_name="Marmita Pronta",
-            quantity=2,
-            base_price=Decimal("25.00"),
-            subtotal=Decimal("50.00"),
-        )
-    )
+    parado = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 0), "30.00")
+    entregue = pedido_em("ENTREGUE", datetime(2026, 11, 14, 16, 0), "50.00")
+    adicionar_item(entregue, "Marmita Pronta", 2, "25.00", meal_box_id=marmita_pronta.id)
     marmita_pronta.sold_out_on = date(2026, 11, 14)
     db.flush()
 
@@ -52,7 +36,7 @@ def test_monta_o_painel_completo_com_dados_consistentes(
     assert painel.em_andamento[0].atrasado is True
     assert [a.codigo for a in painel.atencao] == ["PEDIDO_ATRASADO", "ITENS_INDISPONIVEIS"]
     assert painel.resumo.atual.pedidos == 2
-    assert painel.resumo.atual.vendas == Decimal("80.00")
+    assert str(painel.resumo.atual.vendas) == "80.00"
     assert [(m.nome, m.quantidade) for m in painel.mais_vendidos] == [("Marmita Pronta", 2)]
 
 
@@ -108,12 +92,9 @@ def test_painel_vazio_tem_formato_completo(client, admin_headers):
 
 
 def test_mostra_pedido_aberto_e_alerta_de_item_esgotado(
-    client, admin_headers, db, criar_pedido_direto, forma_pagamento_dinheiro,
-    status_criado, marmita_pronta,
+    client, admin_headers, db, pedido_em, utc_ha_minutos, marmita_pronta
 ):
-    pedido = criar_pedido_direto(
-        status_criado, forma_pagamento_dinheiro, Decimal("30.00"), _utc_naive(2)
-    )
+    pedido = pedido_em("CRIADO", utc_ha_minutos(2), "30.00")
     marmita_pronta.sold_out_on = hoje_local()
     db.flush()
 
@@ -131,13 +112,9 @@ def test_mostra_pedido_aberto_e_alerta_de_item_esgotado(
 
 
 def test_nao_mostra_pedidos_de_outro_restaurante(
-    client, admin_headers, criar_pedido_direto, forma_pagamento_dinheiro,
-    status_criado, outro_restaurante,
+    client, admin_headers, pedido_em, utc_ha_minutos, outro_restaurante
 ):
-    criar_pedido_direto(
-        status_criado, forma_pagamento_dinheiro, Decimal("30.00"), _utc_naive(2),
-        restaurant_id=outro_restaurante.id,
-    )
+    pedido_em("CRIADO", utc_ha_minutos(2), "30.00", restaurant_id=outro_restaurante.id)
 
     corpo = client.get("/painel/hoje", headers=admin_headers).json()
 

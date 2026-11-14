@@ -1,58 +1,15 @@
 from datetime import date, datetime, timezone
-from decimal import Decimal
-
-import pytest
 
 from app.model.models import (
     ComboMealBoxItem,
     DeliveryChargeMode,
     OrderServiceType,
-    OrderStatus,
-    OrderStatusHistory,
     RestaurantDeliverySettings,
 )
-from app.services import pedido_fluxo
 from app.services import painel_alertas_service as service
 
 AGORA = datetime(2026, 11, 14, 18, 30, tzinfo=timezone.utc)
 HOJE = date(2026, 11, 14)
-
-ORDEM = {
-    codigo: posicao
-    for posicao, codigo in enumerate(
-        (
-            "CRIADO", "CONFIRMADO", "EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA",
-            "ENTREGUE", "RETIRADO", "CANCELADO", "RECUSADO",
-        ),
-        start=1,
-    )
-}
-
-
-def _status(db, codigo):
-    status = db.query(OrderStatus).filter_by(code=codigo).first()
-    if status is None:
-        status = OrderStatus(
-            code=codigo, name=codigo, order=ORDEM[codigo], is_final=codigo in pedido_fluxo.FINAIS
-        )
-        db.add(status)
-        db.flush()
-    return status
-
-
-def _pedido(db, criar_pedido_direto, pagto, codigo, criado_em, **extra):
-    return criar_pedido_direto(
-        _status(db, codigo), pagto, Decimal("20.00"), criado_em, **extra
-    )
-
-
-def _mudou_em(db, pedido, codigo, momento):
-    db.add(
-        OrderStatusHistory(
-            order_id=pedido.id, new_status_id=_status(db, codigo).id, changed_at=momento
-        )
-    )
-    db.flush()
 
 
 def _config(db, restaurante, **extra):
@@ -64,15 +21,9 @@ def _config(db, restaurante, **extra):
     return config
 
 
-def test_criado_so_atrasa_depois_de_10_minutos(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
-):
-    no_limite = _pedido(
-        db, criar_pedido_direto, forma_pagamento_dinheiro, "CRIADO", datetime(2026, 11, 14, 18, 20)
-    )
-    passou = _pedido(
-        db, criar_pedido_direto, forma_pagamento_dinheiro, "CRIADO", datetime(2026, 11, 14, 18, 19)
-    )
+def test_criado_so_atrasa_depois_de_10_minutos(db, restaurante, pedido_em):
+    no_limite = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 20))
+    passou = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 19))
 
     atrasos = service.atrasos_dos_pedidos(db, restaurante.id, AGORA)
 
@@ -84,16 +35,12 @@ def test_criado_so_atrasa_depois_de_10_minutos(
 
 
 def test_confirmado_conta_desde_a_ultima_mudanca_de_status(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
+    db, restaurante, pedido_em, registrar_mudanca
 ):
-    recente = _pedido(
-        db, criar_pedido_direto, forma_pagamento_dinheiro, "CONFIRMADO", datetime(2026, 11, 14, 17, 0)
-    )
-    antigo = _pedido(
-        db, criar_pedido_direto, forma_pagamento_dinheiro, "CONFIRMADO", datetime(2026, 11, 14, 17, 0)
-    )
-    _mudou_em(db, recente, "CONFIRMADO", datetime(2026, 11, 14, 18, 25))
-    _mudou_em(db, antigo, "CONFIRMADO", datetime(2026, 11, 14, 18, 10))
+    recente = pedido_em("CONFIRMADO", datetime(2026, 11, 14, 17, 0))
+    antigo = pedido_em("CONFIRMADO", datetime(2026, 11, 14, 17, 0))
+    registrar_mudanca(recente, "CONFIRMADO", datetime(2026, 11, 14, 18, 25))
+    registrar_mudanca(antigo, "CONFIRMADO", datetime(2026, 11, 14, 18, 10))
 
     atrasos = service.atrasos_dos_pedidos(db, restaurante.id, AGORA)
 
@@ -101,16 +48,12 @@ def test_confirmado_conta_desde_a_ultima_mudanca_de_status(
     assert atrasos[antigo.id].minutos == 20
 
 
-def test_em_preparo_usa_tempo_estimado_e_o_tipo_de_atendimento(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
-):
+def test_em_preparo_usa_tempo_estimado_e_o_tipo_de_atendimento(db, restaurante, pedido_em):
     _config(db, restaurante, delivery_time_minutes=40, pickup_time_minutes=15)
-    pagto = forma_pagamento_dinheiro
-    entrega_atrasada = _pedido(db, criar_pedido_direto, pagto, "EM_PREPARO", datetime(2026, 11, 14, 17, 45))
-    entrega_no_prazo = _pedido(db, criar_pedido_direto, pagto, "EM_PREPARO", datetime(2026, 11, 14, 18, 0))
-    retirada_atrasada = _pedido(
-        db, criar_pedido_direto, pagto, "EM_PREPARO", datetime(2026, 11, 14, 18, 10),
-        service_type=OrderServiceType.PICKUP,
+    entrega_atrasada = pedido_em("EM_PREPARO", datetime(2026, 11, 14, 17, 45))
+    entrega_no_prazo = pedido_em("EM_PREPARO", datetime(2026, 11, 14, 18, 0))
+    retirada_atrasada = pedido_em(
+        "EM_PREPARO", datetime(2026, 11, 14, 18, 10), service_type=OrderServiceType.PICKUP
     )
 
     atrasos = service.atrasos_dos_pedidos(db, restaurante.id, AGORA)
@@ -124,15 +67,14 @@ def test_em_preparo_usa_tempo_estimado_e_o_tipo_de_atendimento(
 
 
 def test_sem_tempo_estimado_usa_limites_padrao(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
+    db, restaurante, pedido_em, registrar_mudanca
 ):
-    pagto = forma_pagamento_dinheiro
-    preparo_lento = _pedido(db, criar_pedido_direto, pagto, "EM_PREPARO", datetime(2026, 11, 14, 17, 50))
-    preparo_ok = _pedido(db, criar_pedido_direto, pagto, "EM_PREPARO", datetime(2026, 11, 14, 18, 10))
-    rota_longa = _pedido(db, criar_pedido_direto, pagto, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 0))
-    rota_ok = _pedido(db, criar_pedido_direto, pagto, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 0))
-    _mudou_em(db, rota_longa, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 40))
-    _mudou_em(db, rota_ok, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 18, 0))
+    preparo_lento = pedido_em("EM_PREPARO", datetime(2026, 11, 14, 17, 50))
+    preparo_ok = pedido_em("EM_PREPARO", datetime(2026, 11, 14, 18, 10))
+    rota_longa = pedido_em("SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 0))
+    rota_ok = pedido_em("SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 0))
+    registrar_mudanca(rota_longa, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 17, 40))
+    registrar_mudanca(rota_ok, "SAIU_PARA_ENTREGA", datetime(2026, 11, 14, 18, 0))
 
     atrasos = service.atrasos_dos_pedidos(db, restaurante.id, AGORA)
 
@@ -143,14 +85,10 @@ def test_sem_tempo_estimado_usa_limites_padrao(
     assert atrasos[rota_longa.id].limite_min == 45
 
 
-def test_pronto_de_retirada_nunca_alerta_mas_o_de_entrega_sim(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
-):
-    pagto = forma_pagamento_dinheiro
-    entrega = _pedido(db, criar_pedido_direto, pagto, "PRONTO", datetime(2026, 11, 14, 18, 19))
-    retirada = _pedido(
-        db, criar_pedido_direto, pagto, "PRONTO", datetime(2026, 11, 14, 18, 0),
-        service_type=OrderServiceType.PICKUP,
+def test_pronto_de_retirada_nunca_alerta_mas_o_de_entrega_sim(db, restaurante, pedido_em):
+    entrega = pedido_em("PRONTO", datetime(2026, 11, 14, 18, 19))
+    retirada = pedido_em(
+        "PRONTO", datetime(2026, 11, 14, 18, 0), service_type=OrderServiceType.PICKUP
     )
 
     atrasos = service.atrasos_dos_pedidos(db, restaurante.id, AGORA)
@@ -160,15 +98,12 @@ def test_pronto_de_retirada_nunca_alerta_mas_o_de_entrega_sim(
 
 
 def test_ignora_finalizados_e_outros_restaurantes(
-    db, restaurante, outro_restaurante, criar_pedido_direto, forma_pagamento_dinheiro
+    db, restaurante, outro_restaurante, pedido_em
 ):
-    pagto = forma_pagamento_dinheiro
     antigo = datetime(2026, 11, 14, 12, 0)
     for codigo in ("ENTREGUE", "RETIRADO", "CANCELADO", "RECUSADO"):
-        _pedido(db, criar_pedido_direto, pagto, codigo, antigo)
-    _pedido(
-        db, criar_pedido_direto, pagto, "CRIADO", antigo, restaurant_id=outro_restaurante.id
-    )
+        pedido_em(codigo, antigo)
+    pedido_em("CRIADO", antigo, restaurant_id=outro_restaurante.id)
 
     assert service.atrasos_dos_pedidos(db, restaurante.id, AGORA) == {}
 
@@ -215,11 +150,10 @@ def test_item_inativo_nao_aparece_como_indisponivel(db, restaurante, marmita_ina
 
 
 def test_alertas_ordenam_pedidos_antes_dos_itens_e_montam_os_textos(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, marmita_pronta
+    db, restaurante, pedido_em, marmita_pronta
 ):
-    pagto = forma_pagamento_dinheiro
-    mais_antigo = _pedido(db, criar_pedido_direto, pagto, "CRIADO", datetime(2026, 11, 14, 18, 0))
-    mais_novo = _pedido(db, criar_pedido_direto, pagto, "CRIADO", datetime(2026, 11, 14, 18, 15))
+    mais_antigo = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 0))
+    mais_novo = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 15))
     marmita_pronta.sold_out_on = HOJE
     db.flush()
 
@@ -237,12 +171,8 @@ def test_alertas_ordenam_pedidos_antes_dos_itens_e_montam_os_textos(
     assert itens.detalhe == "Marmita Pronta"
 
 
-def test_alerta_de_um_pedido_detalha_o_tempo(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro
-):
-    pedido = _pedido(
-        db, criar_pedido_direto, forma_pagamento_dinheiro, "CRIADO", datetime(2026, 11, 14, 18, 15)
-    )
+def test_alerta_de_um_pedido_detalha_o_tempo(db, restaurante, pedido_em):
+    pedido = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 15))
 
     [alerta] = service.alertas_de_atencao(db, restaurante.id, AGORA)
 

@@ -1,5 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from datetime import date, datetime, timezone
 
 from app.model.models import OrderServiceType
 from app.services import painel_avisos_service as service
@@ -8,16 +7,8 @@ AGORA = datetime(2026, 11, 14, 18, 30, tzinfo=timezone.utc)
 HOJE = date(2026, 11, 14)
 
 
-def _utc_naive(minutos_atras=0):
-    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutos_atras)
-
-
-def test_cada_pedido_novo_vira_um_aviso(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado
-):
-    pedido = criar_pedido_direto(
-        status_criado, forma_pagamento_dinheiro, Decimal("30.00"), datetime(2026, 11, 14, 18, 25)
-    )
+def test_cada_pedido_novo_vira_um_aviso(db, restaurante, pedido_em):
+    pedido = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 25))
 
     resultado = service.avisos_do_painel(db, restaurante.id, agora=AGORA)
 
@@ -34,13 +25,8 @@ def test_cada_pedido_novo_vira_um_aviso(
     assert aviso.minutos == 5
 
 
-def test_pedido_de_retirada_mostra_o_tipo_no_detalhe(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado
-):
-    criar_pedido_direto(
-        status_criado, forma_pagamento_dinheiro, Decimal("30.00"),
-        datetime(2026, 11, 14, 18, 28), service_type=OrderServiceType.PICKUP,
-    )
+def test_pedido_de_retirada_mostra_o_tipo_no_detalhe(db, restaurante, pedido_em):
+    pedido_em("CRIADO", datetime(2026, 11, 14, 18, 28), service_type=OrderServiceType.PICKUP)
 
     [aviso] = service.avisos_do_painel(db, restaurante.id, agora=AGORA).avisos
 
@@ -48,11 +34,10 @@ def test_pedido_de_retirada_mostra_o_tipo_no_detalhe(
 
 
 def test_ordem_critico_depois_novos_depois_demais_alertas(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado, marmita_pronta
+    db, restaurante, pedido_em, marmita_pronta
 ):
-    pagto = forma_pagamento_dinheiro
-    antigo = criar_pedido_direto(status_criado, pagto, Decimal("30.00"), datetime(2026, 11, 14, 18, 15))
-    recente = criar_pedido_direto(status_criado, pagto, Decimal("30.00"), datetime(2026, 11, 14, 18, 25))
+    antigo = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 15))
+    recente = pedido_em("CRIADO", datetime(2026, 11, 14, 18, 25))
     marmita_pronta.sold_out_on = HOJE
     db.flush()
 
@@ -75,12 +60,10 @@ def test_ordem_critico_depois_novos_depois_demais_alertas(
 
 
 def test_limite_corta_so_os_pedidos_novos_e_o_total_continua_real(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_criado
+    db, restaurante, pedido_em
 ):
-    pagto = forma_pagamento_dinheiro
     criados = [
-        criar_pedido_direto(status_criado, pagto, Decimal("30.00"), datetime(2026, 11, 14, 18, minuto))
-        for minuto in (26, 27, 28)
+        pedido_em("CRIADO", datetime(2026, 11, 14, 18, minuto)) for minuto in (26, 27, 28)
     ]
 
     resultado = service.avisos_do_painel(db, restaurante.id, limite=2, agora=AGORA)
@@ -91,12 +74,8 @@ def test_limite_corta_so_os_pedidos_novos_e_o_total_continua_real(
     ]
 
 
-def test_pedido_atrasado_que_nao_e_novo_gera_so_o_alerta(
-    db, restaurante, criar_pedido_direto, forma_pagamento_dinheiro, status_confirmado
-):
-    criar_pedido_direto(
-        status_confirmado, forma_pagamento_dinheiro, Decimal("30.00"), datetime(2026, 11, 14, 18, 0)
-    )
+def test_pedido_atrasado_que_nao_e_novo_gera_so_o_alerta(db, restaurante, pedido_em):
+    pedido_em("CONFIRMADO", datetime(2026, 11, 14, 18, 0))
 
     resultado = service.avisos_do_painel(db, restaurante.id, agora=AGORA)
 
@@ -105,16 +84,12 @@ def test_pedido_atrasado_que_nao_e_novo_gera_so_o_alerta(
 
 
 def test_ignora_finalizados_e_outros_restaurantes(
-    db, restaurante, outro_restaurante, criar_pedido_direto, forma_pagamento_dinheiro,
-    status_criado, status_entregue, status_cancelado,
+    db, restaurante, outro_restaurante, pedido_em
 ):
-    pagto = forma_pagamento_dinheiro
     recente = datetime(2026, 11, 14, 18, 28)
-    criar_pedido_direto(status_entregue, pagto, Decimal("30.00"), recente)
-    criar_pedido_direto(status_cancelado, pagto, Decimal("30.00"), recente)
-    criar_pedido_direto(
-        status_criado, pagto, Decimal("30.00"), recente, restaurant_id=outro_restaurante.id
-    )
+    pedido_em("ENTREGUE", recente)
+    pedido_em("CANCELADO", recente)
+    pedido_em("CRIADO", recente, restaurant_id=outro_restaurante.id)
 
     resultado = service.avisos_do_painel(db, restaurante.id, agora=AGORA)
 
@@ -130,12 +105,9 @@ def test_sem_nada_o_sino_fica_vazio(db, restaurante):
 
 
 def test_admin_e_atendente_acessam_o_sino(
-    client, admin_headers, atendente_user, token_para, db, criar_pedido_direto,
-    forma_pagamento_dinheiro, status_criado,
+    client, admin_headers, atendente_user, token_para, pedido_em, utc_ha_minutos
 ):
-    criar_pedido_direto(
-        status_criado, forma_pagamento_dinheiro, Decimal("30.00"), _utc_naive(2)
-    )
+    pedido_em("CRIADO", utc_ha_minutos(2))
     headers_atendente = {"Authorization": f"Bearer {token_para(atendente_user)}"}
 
     for headers in (admin_headers, headers_atendente):
