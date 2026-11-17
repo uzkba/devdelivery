@@ -867,6 +867,27 @@ class CashDay(Base):
     )
 
 
+class CashClosingMethod(Base):
+    __tablename__ = "fechamento_caixa_forma"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    closing_id: Mapped[uuid.UUID] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="CASCADE", name="fk_fechamento_forma_fechamento"),
+        nullable=False,
+    )
+    method_code: Mapped[str] = mapped_column("forma", String(20), nullable=False)
+    order_count: Mapped[int] = mapped_column("quantidade_pedidos", Integer, nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column("valor_esperado", Numeric(10, 2), nullable=False)
+    counted_amount: Mapped[Decimal] = mapped_column("valor_contado", Numeric(10, 2), nullable=False)
+    difference: Mapped[Decimal] = mapped_column("diferenca", Numeric(10, 2), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("valor_contado >= 0", name="ck_fechamento_forma_contado"),
+        UniqueConstraint("fechamento_id", "forma", name="uq_fechamento_forma"),
+    )
+
+
 # ===========================================================================
 # 7. ENTREGA (cada restaurante escolhe a propria forma de cobranca)
 # ===========================================================================
