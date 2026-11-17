@@ -839,6 +839,34 @@ class CashClosing(Base):
     )
 
 
+class CashDay(Base):
+    __tablename__ = "caixa_dia"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
+    business_date: Mapped[date] = mapped_column("data", Date, nullable=False)
+    status: Mapped[str] = mapped_column("status", String(10), default="ABERTO", server_default="ABERTO", nullable=False)
+    opened_by: Mapped[uuid.UUID] = mapped_column("aberto_por", ForeignKey("usuario_admin.id"), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column("aberto_em", DateTime, server_default=func.now(), nullable=False)
+    closed_by: Mapped[uuid.UUID | None] = mapped_column("fechado_por", ForeignKey("usuario_admin.id"), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column("fechado_em", DateTime, nullable=True)
+    reopened_by: Mapped[uuid.UUID | None] = mapped_column("reaberto_por", ForeignKey("usuario_admin.id"), nullable=True)
+    reopened_at: Mapped[datetime | None] = mapped_column("reaberto_em", DateTime, nullable=True)
+    reopen_count: Mapped[int] = mapped_column("reaberturas", Integer, default=0, server_default="0", nullable=False)
+    closing_id: Mapped[uuid.UUID | None] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="SET NULL", name="fk_caixa_dia_fechamento"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('ABERTO','FECHADO')", name="ck_caixa_dia_status"),
+        CheckConstraint("reaberturas >= 0", name="ck_caixa_dia_reaberturas"),
+        UniqueConstraint("restaurante_id", "data", name="uq_caixa_dia_restaurante_data"),
+        Index("idx_caixa_dia_restaurante_status", "restaurante_id", "status"),
+    )
+
+
 # ===========================================================================
 # 7. ENTREGA (cada restaurante escolhe a propria forma de cobranca)
 # ===========================================================================
