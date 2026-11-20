@@ -10,7 +10,6 @@ from app.routers import (
     marmita_route,
     pedido_route,
     teste,
-    fechamento_caixa_route,
     relatorio_route,
     restaurante_publico_route,
     restaurante_admin_route,
@@ -46,7 +45,6 @@ app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
 app.include_router(alimento_route.router)
 app.include_router(pedido_route.router)
-app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
 app.include_router(restaurante_publico_route.router)
 app.include_router(restaurante_admin_route.router)
