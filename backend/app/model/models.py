@@ -888,6 +888,28 @@ class CashClosingMethod(Base):
     )
 
 
+class CashClosingDriver(Base):
+    __tablename__ = "fechamento_caixa_entregador"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    closing_id: Mapped[uuid.UUID] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="CASCADE", name="fk_fechamento_entregador_fechamento"),
+        nullable=False,
+    )
+    driver_id: Mapped[uuid.UUID] = mapped_column("entregador_id", ForeignKey("usuario_admin.id"), nullable=False)
+    driver_name: Mapped[str] = mapped_column("entregador_nome", String(150), nullable=False)
+    delivery_count: Mapped[int] = mapped_column("quantidade_entregas", Integer, nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column("valor_esperado", Numeric(10, 2), nullable=False)
+    handed_amount: Mapped[Decimal] = mapped_column("valor_repassado", Numeric(10, 2), nullable=False)
+    difference: Mapped[Decimal] = mapped_column("diferenca", Numeric(10, 2), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("valor_repassado >= 0", name="ck_fechamento_entregador_repassado"),
+        UniqueConstraint("fechamento_id", "entregador_id", name="uq_fechamento_entregador"),
+    )
+
+
 # ===========================================================================
 # 7. ENTREGA (cada restaurante escolhe a propria forma de cobranca)
 # ===========================================================================
