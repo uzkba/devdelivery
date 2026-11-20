@@ -30,14 +30,13 @@ def _tipo_e_id(meal_box_id, combo_id, food_id) -> tuple[str, uuid.UUID | None]:
     return TIPO_AVULSO, food_id
 
 
-def mais_vendidos_hoje(
+def mais_vendidos_no_periodo(
     db: Session,
     restaurant_id: uuid.UUID,
+    inicio: datetime,
+    fim: datetime,
     limite: int = 3,
-    agora: datetime | None = None,
 ) -> list[ItemMaisVendido]:
-    janela, _ = periodo.janelas_comparaveis(agora)
-
     nome_do_orfao = case(
         (
             and_(
@@ -64,8 +63,8 @@ def mais_vendidos_hoje(
         .join(OrderStatus, OrderStatus.id == Order.status_id)
         .filter(
             Order.restaurant_id == restaurant_id,
-            Order.order_datetime >= janela.inicio,
-            Order.order_datetime < janela.fim,
+            Order.order_datetime >= inicio,
+            Order.order_datetime < fim,
             OrderStatus.code.notin_(NAO_FATURAVEIS),
         )
         .group_by(
@@ -83,3 +82,13 @@ def mais_vendidos_hoje(
             ItemMaisVendido(tipo=tipo, item_id=item_id, nome=nome_item, quantidade=int(total))
         )
     return resultado
+
+
+def mais_vendidos_hoje(
+    db: Session,
+    restaurant_id: uuid.UUID,
+    limite: int = 3,
+    agora: datetime | None = None,
+) -> list[ItemMaisVendido]:
+    janela, _ = periodo.janelas_comparaveis(agora)
+    return mais_vendidos_no_periodo(db, restaurant_id, janela.inicio, janela.fim, limite)

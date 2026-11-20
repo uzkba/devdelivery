@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.model.models import Order, OrderStatus
+from app.core import periodo
 
 STATUS_NAO_FATURAVEIS = ("CANCELADO", "RECUSADO")
 
@@ -31,8 +32,8 @@ def get_relatorio_pedidos(
         if tem_pedido_no_restaurante is None:
             raise ClienteNaoEncontrado()
 
-    inicio_dt = datetime.combine(data_inicio, time.min)
-    fim_dt = datetime.combine(data_fim + timedelta(days=1), time.min)
+    inicio_dt = periodo.intervalo_do_dia_em_utc(data_inicio)[0]
+    fim_dt = periodo.intervalo_do_dia_em_utc(data_fim)[1]
 
     filtros = [
         Order.restaurant_id == restaurant_id,
