@@ -1,13 +1,14 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import periodo
-from app.core.tempo import hoje_local
+from app.core.tempo import FUSO_LOCAL, agora_local, hoje_local
 from app.model.models import (
+    CashDay,
     Combo,
     Food,
     MealBox,
@@ -18,16 +19,20 @@ from app.model.models import (
     RestaurantDeliverySettings,
 )
 from app.services import pedido_fluxo
+from app.services.estado_restaurante_service import buscar_faixas
 from app.services.painel_ranking_service import TIPO_AVULSO, TIPO_COMBO, TIPO_MARMITA
 
 ALERTA_PEDIDO_ATRASADO = "PEDIDO_ATRASADO"
 ALERTA_ITENS_INDISPONIVEIS = "ITENS_INDISPONIVEIS"
+ALERTA_CAIXA_ABERTO = "CAIXA_ABERTO"
 
 GRAVIDADE_CRITICO = "CRITICO"
 GRAVIDADE_AVISO = "AVISO"
 
 DESTINO_PEDIDOS = "pedidos"
 DESTINO_CARDAPIO = "cardapio"
+DESTINO_CAIXA = "caixa"
+STATUS_CAIXA_ABERTO = "ABERTO"
 
 MOTIVO_PARADO = "PARADO"
 MOTIVO_TEMPO_ESTIMADO = "TEMPO_ESTIMADO"
@@ -249,10 +254,72 @@ def _alertas_de_itens(itens: list[ItemIndisponivel]) -> list[Alerta]:
     ]
 
 
+def _hora_local(momento: datetime) -> str:
+    local = momento.replace(tzinfo=timezone.utc).astimezone(FUSO_LOCAL)
+    return f"{local.hour}h{local.minute:02d}"
+
+
+def _passou_do_horario(db: Session, restaurant_id: uuid.UUID, agora: datetime) -> bool:
+    faixas = buscar_faixas(db, restaurant_id)
+    if not faixas:
+        return False
+    fechamentos_de_hoje = [f.closes_at for f in faixas if f.weekday == agora.weekday()]
+    if not fechamentos_de_hoje:
+        return True
+    return agora.time() >= max(fechamentos_de_hoje)
+
+
 def _alertas_de_caixa(
     db: Session, restaurant_id: uuid.UUID, agora: datetime | None
 ) -> list[Alerta]:
-    return []
+    momento = agora_local(agora)
+    hoje = momento.date()
+
+    caixas = (
+        db.query(CashDay)
+        .filter(
+            CashDay.restaurant_id == restaurant_id,
+            CashDay.status == STATUS_CAIXA_ABERTO,
+            CashDay.business_date <= hoje,
+        )
+        .order_by(CashDay.business_date)
+        .all()
+    )
+    pendentes = [
+        caixa
+        for caixa in caixas
+        if caixa.business_date < hoje or _passou_do_horario(db, restaurant_id, momento)
+    ]
+    if not pendentes:
+        return []
+
+    quantidade = len(pendentes)
+    if quantidade == 1:
+        unico = pendentes[0]
+        if unico.business_date == hoje:
+            detalhe = (
+                f"Aberto desde {_hora_local(unico.opened_at)}: "
+                "lembre de fechar após o último pedido"
+            )
+        else:
+            detalhe = f"Caixa de {unico.business_date:%d/%m} ainda aberto: feche para conferir o dia"
+    else:
+        rotulos = [
+            "hoje" if caixa.business_date == hoje else f"{caixa.business_date:%d/%m}"
+            for caixa in pendentes
+        ]
+        detalhe = f"Caixas de {_listar(rotulos)} ainda abertos"
+
+    return [
+        Alerta(
+            codigo=ALERTA_CAIXA_ABERTO,
+            gravidade=GRAVIDADE_AVISO,
+            titulo=_titulo(quantidade, "caixa aberto", "caixas abertos"),
+            detalhe=detalhe,
+            destino=DESTINO_CAIXA,
+            quantidade=quantidade,
+        )
+    ]
 
 
 def alertas_de_atencao(
