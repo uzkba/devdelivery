@@ -10,7 +10,6 @@ from app.routers import (
     marmita_route,
     pedido_route,
     teste,
-    fechamento_caixa_route,
     relatorio_route,
     restaurante_publico_route,
     restaurante_admin_route,
@@ -21,6 +20,7 @@ from app.routers import (
     pagamento_admin_route,
     ws_notificacoes_route,
     painel_route,
+    caixa_route,
 )
 
 app = FastAPI(
@@ -45,7 +45,6 @@ app.include_router(endereco_route.router)
 app.include_router(categoria_alimento_route.router)
 app.include_router(alimento_route.router)
 app.include_router(pedido_route.router)
-app.include_router(fechamento_caixa_route.router)
 app.include_router(relatorio_route.router)
 app.include_router(restaurante_publico_route.router)
 app.include_router(restaurante_admin_route.router)
@@ -57,6 +56,7 @@ app.include_router(bairro_entrega_route.router)
 app.include_router(pagamento_admin_route.router)
 app.include_router(ws_notificacoes_route.router)
 app.include_router(painel_route.router)
+app.include_router(caixa_route.router)
 
 for _router in disponibilidade_route.routers:
     app.include_router(_router)

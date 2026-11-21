@@ -839,6 +839,77 @@ class CashClosing(Base):
     )
 
 
+class CashDay(Base):
+    __tablename__ = "caixa_dia"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    restaurant_id: Mapped[uuid.UUID] = mapped_column("restaurante_id", ForeignKey("restaurante.id"), nullable=False)
+    business_date: Mapped[date] = mapped_column("data", Date, nullable=False)
+    status: Mapped[str] = mapped_column("status", String(10), default="ABERTO", server_default="ABERTO", nullable=False)
+    opened_by: Mapped[uuid.UUID] = mapped_column("aberto_por", ForeignKey("usuario_admin.id"), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column("aberto_em", DateTime, server_default=func.now(), nullable=False)
+    closed_by: Mapped[uuid.UUID | None] = mapped_column("fechado_por", ForeignKey("usuario_admin.id"), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column("fechado_em", DateTime, nullable=True)
+    reopened_by: Mapped[uuid.UUID | None] = mapped_column("reaberto_por", ForeignKey("usuario_admin.id"), nullable=True)
+    reopened_at: Mapped[datetime | None] = mapped_column("reaberto_em", DateTime, nullable=True)
+    reopen_count: Mapped[int] = mapped_column("reaberturas", Integer, default=0, server_default="0", nullable=False)
+    closing_id: Mapped[uuid.UUID | None] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="SET NULL", name="fk_caixa_dia_fechamento"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('ABERTO','FECHADO')", name="ck_caixa_dia_status"),
+        CheckConstraint("reaberturas >= 0", name="ck_caixa_dia_reaberturas"),
+        UniqueConstraint("restaurante_id", "data", name="uq_caixa_dia_restaurante_data"),
+        Index("idx_caixa_dia_restaurante_status", "restaurante_id", "status"),
+    )
+
+
+class CashClosingMethod(Base):
+    __tablename__ = "fechamento_caixa_forma"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    closing_id: Mapped[uuid.UUID] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="CASCADE", name="fk_fechamento_forma_fechamento"),
+        nullable=False,
+    )
+    method_code: Mapped[str] = mapped_column("forma", String(20), nullable=False)
+    order_count: Mapped[int] = mapped_column("quantidade_pedidos", Integer, nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column("valor_esperado", Numeric(10, 2), nullable=False)
+    counted_amount: Mapped[Decimal] = mapped_column("valor_contado", Numeric(10, 2), nullable=False)
+    difference: Mapped[Decimal] = mapped_column("diferenca", Numeric(10, 2), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("valor_contado >= 0", name="ck_fechamento_forma_contado"),
+        UniqueConstraint("fechamento_id", "forma", name="uq_fechamento_forma"),
+    )
+
+
+class CashClosingDriver(Base):
+    __tablename__ = "fechamento_caixa_entregador"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    closing_id: Mapped[uuid.UUID] = mapped_column(
+        "fechamento_id",
+        ForeignKey("fechamento_caixa.id", ondelete="CASCADE", name="fk_fechamento_entregador_fechamento"),
+        nullable=False,
+    )
+    driver_id: Mapped[uuid.UUID] = mapped_column("entregador_id", ForeignKey("usuario_admin.id"), nullable=False)
+    driver_name: Mapped[str] = mapped_column("entregador_nome", String(150), nullable=False)
+    delivery_count: Mapped[int] = mapped_column("quantidade_entregas", Integer, nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column("valor_esperado", Numeric(10, 2), nullable=False)
+    handed_amount: Mapped[Decimal] = mapped_column("valor_repassado", Numeric(10, 2), nullable=False)
+    difference: Mapped[Decimal] = mapped_column("diferenca", Numeric(10, 2), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("valor_repassado >= 0", name="ck_fechamento_entregador_repassado"),
+        UniqueConstraint("fechamento_id", "entregador_id", name="uq_fechamento_entregador"),
+    )
+
+
 # ===========================================================================
 # 7. ENTREGA (cada restaurante escolhe a propria forma de cobranca)
 # ===========================================================================
